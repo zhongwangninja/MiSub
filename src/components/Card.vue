@@ -1,16 +1,15 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { fetchNodeCount } from '$api';
-import { extractNodeName } from '$utils';
+import { ref, onMounted, computed, watch } from 'vue';
+import { fetchNodeCount } from '../lib/api.js';
+import { extractNodeName } from '../lib/utils.js';
 
-// 1. 导入新的图标组件
-import Vmess from '$icons/Vmess.vue';
-import Vless from '$icons/Vless.vue';
-import Trojan from '$icons/Trojan.vue';
-import Ss from '$icons/Ss.vue';
-import Http from '$icons/Http.vue';
-import Clash from '$icons/Clash.vue';
-import Hysteria2 from '$icons/Hysteria2.vue';
+import Vmess from '../icons/Vmess.vue';
+import Trojan from '../icons/Trojan.vue';
+import Ss from '../icons/Ss.vue';
+import Http from '../icons/Http.vue';
+import Clash from '../icons/Clash.vue';
+import Hysteria2 from '../icons/Hysteria2.vue';
+import Vless from '../icons/Vless.vue';
 
 const props = defineProps({
   misub: Object

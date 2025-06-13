@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue';
-import { login } from '@/api';
+import { login } from '../lib/api.js';
 
 const emit = defineEmits(['success']);
 
@@ -25,7 +25,7 @@ const handleSubmit = async () => {
       const result = await response.json();
       error.value = result.error || '登录失败，请重试';
     } catch {
-      error.value = response.error || '登录请求失败';
+      error.value = '登录请求失败';
     }
   }
   isLoading.value = false;

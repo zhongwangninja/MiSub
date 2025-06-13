@@ -1,8 +1,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { saveMisubs } from '../lib/api.js'; // 修正路径
-import { extractNodeName } from '../lib/utils.js'; // 修正路径
-import { useToast } from '../lib/stores.js'; // 修正路径
+import { saveMisubs } from '../lib/api.js';
+import { extractNodeName } from '../lib/utils.js';
+import { useToast } from '../lib/stores.js';
 
 import Header from './Header.vue';
 import Overview from './Overview.vue';
@@ -18,14 +18,12 @@ const props = defineProps({
 const { showToast } = useToast();
 const misubs = ref([]);
 const config = ref({});
-const isLoading = ref(true);
 
 onMounted(() => {
   if (props.data) {
     misubs.value = props.data.misubs?.map(s => ({ ...s, id: crypto.randomUUID(), nodeCount: 0 })) || [];
     config.value = props.data.config || {};
   }
-  isLoading.value = false;
 });
 
 const isSaving = ref(false);

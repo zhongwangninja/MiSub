@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import clsx from 'clsx';
-import { useToast } from '$stores';
+import { useToast } from '../lib/stores.js';
 
 const props = defineProps({
   config: Object
