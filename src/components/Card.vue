@@ -69,7 +69,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="group bg-white dark:bg-gray-800 rounded-xl shadow-sm ring-1 ring-inset ring-gray-900/5 dark:ring-white/10 p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:ring-indigo-500/30">
+  <div class="group bg-white/[.03] dark:bg-white/[.03] rounded-xl shadow-sm ring-1 ring-inset ring-gray-900/5 dark:ring-white/10 p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:ring-indigo-400/30 relative">
     <div class="flex items-start justify-between gap-2">
       <div class="flex items-center gap-3 overflow-hidden flex-1 pt-1">
         <div class="flex-shrink-0 w-6 h-6 text-indigo-500 dark:text-indigo-400">

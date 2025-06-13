@@ -41,7 +41,7 @@ const copyToClipboard = (text) => {
 </script>
 
 <template>
-    <div class="bg-white/60 dark:bg-gray-900/50 rounded-xl shadow-sm ring-1 ring-inset ring-gray-900/5 dark:ring-white/10 p-5 sticky top-24">
+    <div class="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-xl ring-1 ring-inset ring-gray-900/5 dark:ring-white/10 p-5 sticky top-24">
     <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">订阅链接</h2>
     
     <div class="border-b border-gray-200 dark:border-white/10">
