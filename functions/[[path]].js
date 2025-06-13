@@ -187,12 +187,9 @@ async function handleMisubRequest(request, env) {
 
     const timeTemp = Math.ceil(Date.now() / (1000 * 60 * 60));
     const fakeToken = await MD5MD5(`${config.mytoken}${timeTemp}`);
-    
     let token = url.searchParams.get('token');
     if (url.pathname === `/${config.mytoken}`) token = config.mytoken;
-
     if (!token || ![config.mytoken, fakeToken].includes(token)) return new Response('Invalid token', { status: 403 });
-
     const misubs = await env.MISUB_KV.get(KV_KEY_MAIN, 'json') || [];
     const enabledMisubs = misubs.filter(sub => sub.enabled);
     let urls = [], manualNodes = '';
@@ -200,7 +197,6 @@ async function handleMisubRequest(request, env) {
         if (sub.url.toLowerCase().startsWith('http')) urls.push(sub.url);
         else manualNodes += sub.url + '\n';
     }
-    
     const subContent = await getSUB(urls, userAgentHeader);
     const combinedContent = (manualNodes + subContent).split('\n').filter(line => line.trim()).join('\n');
     const base64Data = btoa(unescape(encodeURIComponent(combinedContent)));
@@ -211,7 +207,6 @@ async function handleMisubRequest(request, env) {
         await sendMessage(config.BotToken, config.ChatID, `#获取订阅 ${config.FileName}`, request.headers.get('CF-Connecting-IP'), `UA: ${userAgentHeader}`);
     }
 
-    // --- 【最终修正】重写输出格式判断逻辑 ---
     let targetFormat = 'base64';
     const validFormats = ['clash', 'singbox', 'surge', 'quanx', 'loon', 'base64'];
     const urlTarget = url.searchParams.get('target');
@@ -241,11 +236,22 @@ async function handleMisubRequest(request, env) {
         if (targetFormat === 'clash') {
             subConverterContent = clashFix(subConverterContent);
         }
-        return new Response(subConverterContent, { headers: { "Content-Disposition": `attachment; filename*=utf-8''${encodeURIComponent(config.FileName)}`, "content-type": "text/plain; charset=utf-8", "Profile-Update-Interval": `${config.SUBUpdateTime}` } });
+
+        // --- 【关键修复】为配置文件添加 .yaml 后缀 ---
+        const fileName = `${config.FileName}.yaml`;
+
+        return new Response(subConverterContent, { 
+            headers: { 
+                "Content-Disposition": `attachment; filename*=utf-8''${encodeURIComponent(fileName)}`,
+                "content-type": "text/plain; charset=utf-8",
+                "Profile-Update-Interval": `${config.SUBUpdateTime}`
+            } 
+        });
     } catch (error) {
         return new Response("订阅转换服务器连接失败", { status: 502 });
     }
 }
+
 
 // --- Cloudflare Pages Functions 入口 ---
 export async function onRequest(context) {
