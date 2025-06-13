@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'; // 1. 导入 computed
+import { ref, computed } from 'vue';
 import clsx from 'clsx';
 import { useToast } from '../lib/stores.js';
 
@@ -9,17 +9,19 @@ const props = defineProps({
 
 const { showToast } = useToast();
 
+// 1. 补全缺失的订阅类型
 const tabs = [
 	{ id: 'sub', query: '', title: '通用' },
 	{ id: 'b64', query: 'base64', title: 'Base64' },
 	{ id: 'clash', query: 'clash', title: 'Clash' },
 	{ id: 'sb', query: 'singbox', title: 'Sing-Box' },
-	{ id: 'surge', query: 'surge', title: 'Surge' }
+	{ id: 'surge', query: 'surge', title: 'Surge' },
+    { id: 'loon', query: 'loon', title: 'Loon' },
+    { id: 'quanx', query: 'quanx', title: 'QuanX' },
 ];
 
 const activeTab = ref('sub');
 
-// 2. 将 baseUrl 改为计算属性
 const baseUrl = computed(() => {
     if (props.config && props.config.mytoken && typeof window !== 'undefined') {
         return `${window.location.protocol}//${window.location.host}/sub?token=${props.config.mytoken}`;
@@ -41,7 +43,7 @@ const copyToClipboard = (text) => {
 </script>
 
 <template>
-    <div class="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-xl ring-1 ring-inset ring-gray-900/5 dark:ring-white/10 p-5 sticky top-24">
+  <div class="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-xl ring-1 ring-inset ring-gray-900/5 dark:ring-white/10 p-5 sticky top-24">
     <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">订阅链接</h2>
     
     <div class="border-b border-gray-200 dark:border-white/10">

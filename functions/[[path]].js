@@ -160,6 +160,7 @@ async function handleMisubRequest(request, env) {
     const url = new URL(request.url);
     const userAgentHeader = request.headers.get('User-Agent') || "Unknown";
     
+    // --- 配置读取部分 (无变化) ---
     const kv_settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
     const config = {
         mytoken: kv_settings.mytoken || env.TOKEN || 'auto',
@@ -171,14 +172,14 @@ async function handleMisubRequest(request, env) {
         ChatID: kv_settings.ChatID || env.TGID || '',
     };
 
+    // --- Token验证部分 (无变化) ---
     const timeTemp = Math.ceil(Date.now() / (1000 * 60 * 60));
     const fakeToken = await MD5MD5(`${config.mytoken}${timeTemp}`);
-    
     let token = url.searchParams.get('token');
     if (url.pathname === `/${config.mytoken}`) token = config.mytoken;
-
     if (!token || ![config.mytoken, fakeToken].includes(token)) return new Response('Invalid token', { status: 403 });
 
+    // --- 订阅内容获取部分 (无变化) ---
     const misubs = await env.MISUB_KV.get(KV_KEY_MAIN, 'json') || [];
     const enabledMisubs = misubs.filter(sub => sub.enabled);
     let urls = [], manualNodes = '';
@@ -186,40 +187,58 @@ async function handleMisubRequest(request, env) {
         if (sub.url.toLowerCase().startsWith('http')) urls.push(sub.url);
         else manualNodes += sub.url + '\n';
     }
-    
     const subContent = await getSUB(urls, userAgentHeader);
     const combinedContent = (manualNodes + subContent).split('\n').filter(line => line.trim()).join('\n');
     const base64Data = btoa(unescape(encodeURIComponent(combinedContent)));
     
     if (token === fakeToken) return new Response(base64Data);
     
+    // --- TG通知部分 (无变化) ---
     if (config.BotToken && config.ChatID) {
         await sendMessage(config.BotToken, config.ChatID, `#获取订阅 ${config.FileName}`, request.headers.get('CF-Connecting-IP'), `UA: ${userAgentHeader}`);
     }
 
-    let targetFormat = 'base64';
-	const ua = userAgentHeader.toLowerCase();
-	if (ua.includes('clash')) targetFormat = 'clash';
-	else if (ua.includes('sing-box') || ua.includes('singbox')) targetFormat = 'singbox';
-	else if (ua.includes('surge')) targetFormat = 'surge';
-	
-    for (const [key] of url.searchParams.entries()) {
-        if (['clash', 'singbox', 'sb', 'surge', 'quanx', 'loon', 'base64'].includes(key)) {
-            targetFormat = key === 'sb' ? 'singbox' : key;
-            break;
-        }
-    }
+    // --- 【关键修复】重写输出格式判断逻辑 ---
+    let targetFormat = 'base64'; // 默认值
+    const urlTarget = url.searchParams.get('target');
 
-    if (targetFormat === 'base64') return new Response(base64Data, { headers: { "content-type": "text/plain; charset=utf-8", "Profile-Update-Interval": `${config.SUBUpdateTime}` } });
+    if (urlTarget && ['base64', 'clash', 'singbox', 'surge', 'quanx', 'loon'].includes(urlTarget)) {
+        // 1. 优先使用URL参数 `?target=`
+        targetFormat = urlTarget;
+    } else {
+        // 2. 如果没有URL参数，则根据User-Agent自动判断 (实现通用链接自动适应)
+        const ua = userAgentHeader.toLowerCase();
+        if (ua.includes('clash')) targetFormat = 'clash';
+        else if (ua.includes('sing-box') || ua.includes('singbox')) targetFormat = 'singbox';
+        else if (ua.includes('surge')) targetFormat = 'surge';
+        else if (ua.includes('quantumult%20x') || ua.includes('quanx')) targetFormat = 'quanx';
+        else if (ua.includes('loon')) targetFormat = 'loon';
+    }
+    
+    // --- 响应返回逻辑 (无变化) ---
+    if (targetFormat === 'base64') {
+        return new Response(base64Data, { 
+            headers: { 
+                "content-type": "text/plain; charset=utf-8",
+                "Profile-Update-Interval": `${config.SUBUpdateTime}` 
+            } 
+        });
+    }
     
     const callbackUrl = `${url.protocol}//${url.hostname}/sub?token=${fakeToken}`;
     const subConverterUrl = `https://${config.subConverter}/sub?target=${targetFormat}&url=${encodeURIComponent(callbackUrl)}&insert=false&config=${encodeURIComponent(config.subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
     
     try {
         const subConverterResponse = await fetch(subConverterUrl);
-        if (!subConverterResponse.ok) return new Response("订阅转换失败", { status: 502 });
+        if (!subConverterResponse.ok) return new Response(`订阅转换失败: ${subConverterResponse.status}`, { status: 502 });
         const subConverterContent = await subConverterResponse.text();
-        return new Response(subConverterContent, { headers: { "Content-Disposition": `attachment; filename*=utf-8''${encodeURIComponent(config.FileName)}`, "content-type": "text/plain; charset=utf-8", "Profile-Update-Interval": `${config.SUBUpdateTime}` } });
+        return new Response(subConverterContent, { 
+            headers: { 
+                "Content-Disposition": `attachment; filename*=utf-8''${encodeURIComponent(config.FileName)}`,
+                "content-type": "text/plain; charset=utf-8",
+                "Profile-Update-Interval": `${config.SUBUpdateTime}`
+            } 
+        });
     } catch (error) {
         return new Response("订阅转换服务器连接失败", { status: 502 });
     }
