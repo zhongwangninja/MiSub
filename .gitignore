@@ -13,7 +13,7 @@ dist-ssr
 
 # Dependencies
 /node_modules/
-
+.wrangler/
 # IDEs and editors
 /.idea
 .project
