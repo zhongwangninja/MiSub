@@ -2,7 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 全局字体渲染优化 */
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* 自定义滚动条样式，使其与主题匹配 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #4f46e5; /* 靛蓝色 */
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #4338ca; /* 深一点的靛蓝色 */
+}
+
+/* 为所有按钮增加一个更柔和的点击动效 */
+button {
+    /* 确保所有变换都有平滑过渡 */
+    transition: all 0.2s ease-in-out;
+}
+button:active {
+    /* 点击时轻微缩放，提供物理反馈 */
+    transform: scale(0.95);
 }

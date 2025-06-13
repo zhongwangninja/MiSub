@@ -125,9 +125,20 @@ const changePage = (page) => {
                       <button @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages" class="px-3 py-1 rounded-md disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-700">下一页 &raquo;</button>
                   </div>
                 </div>
-                <div v-else class="text-center py-16 text-gray-500">
-                    <p>暂无订阅，请点击右上角 "新增订阅" 添加一个。</p>
-                </div>
+                <div v-else class="text-center py-16 text-gray-500 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
+                  <div class="inline-block p-4 bg-indigo-100 dark:bg-indigo-900/50 rounded-full">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-indigo-500 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 11h10" />
+                      </svg>
+                  </div>
+                  <h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">你的订阅列表是空的</h3>
+                  <p class="mt-1 text-sm text-gray-500">开始添加你的第一个订阅链接吧！</p>
+                 <div class="mt-6">
+                      <button @click="handleAdd" class="text-sm font-semibold px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">
+                          新增订阅
+                      </button>
+                  </div>
+              </div>
             </div>
         </div>
         <div class="lg:col-span-1">

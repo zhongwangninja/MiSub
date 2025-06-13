@@ -2,8 +2,10 @@
 import { ref, onMounted } from 'vue';
 import Dashboard from './components/Dashboard.vue';
 import Login from './components/Login.vue';
+import Header from './components/Header.vue';
+import DashboardSkeleton from './components/DashboardSkeleton.vue'; // 1. 导入骨架屏
 import { fetchInitialData } from './lib/api.js';
-import { useTheme } from './lib/stores.js'; // 1. 导入 useTheme
+import { useTheme } from './lib/stores.js';
 
 const { initTheme } = useTheme(); // 2. 获取初始化函数
 
@@ -36,13 +38,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="fixed left-0 top-0 -z-10 h-full w-full bg-white dark:bg-gray-950">
-    <div class="absolute top-0 z-[-2] h-screen w-screen bg-[radial-gradient(100%_50%_at_50%_0%,rgba(129,140,248,0.1)_0,rgba(129,140,248,0)_50%,rgba(129,140,248,0)_100%)]"></div>
-  </div>
-
-  <div v-if="sessionState === 'loading'" class="flex items-center justify-center min-h-screen">
-    <p>正在加载...</p>
-  </div>
-  <Dashboard v-else-if="sessionState === 'loggedIn' && initialData" :data="initialData" />
-  <Login v-else @success="handleLoginSuccess" />
+  <Header />
+  <main class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+    <div v-if="sessionState === 'loading'">
+      <DashboardSkeleton /> </div>
+    <Dashboard v-else-if="sessionState === 'loggedIn' && initialData" :data="initialData" />
+    <Login v-else @success="handleLoginSuccess" />
+  </main>
 </template>
