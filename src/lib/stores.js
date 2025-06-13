@@ -6,12 +6,11 @@ const themeState = reactive({
 });
 
 const toggleTheme = () => {
-    const newTheme = themeState.current === 'dark' ? 'light' : 'dark';
+    if (typeof window === 'undefined') return;
+    const newTheme = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
     themeState.current = newTheme;
-    if (typeof window !== 'undefined') {
-        document.documentElement.classList.toggle('dark', newTheme === 'dark');
-        localStorage.setItem('theme', newTheme);
-    }
+    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+    localStorage.setItem('theme', newTheme);
 };
 
 const initTheme = () => {
@@ -58,3 +57,8 @@ export const useToast = () => {
         showToast
     };
 };
+
+
+// --- Settings Modal Store ---
+// 添加这部分缺失的代码
+export const showSettingsModal = ref(false);
