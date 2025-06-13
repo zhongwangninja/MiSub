@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import clsx from 'clsx';
 import { useToast } from '../lib/stores.js';
 
@@ -9,7 +9,6 @@ const props = defineProps({
 
 const { showToast } = useToast();
 
-// 1. 补全缺失的订阅类型
 const tabs = [
 	{ id: 'sub', query: '', title: '通用' },
 	{ id: 'b64', query: 'base64', title: 'Base64' },
@@ -35,7 +34,7 @@ const copyToClipboard = (text) => {
         return;
     }
     navigator.clipboard.writeText(text).then(() => {
-        showToast('已复制到剪贴板！');
+        showToast('已复制到剪贴板！', 'success');
     }).catch(err => {
         showToast('复制失败: ' + err, 'error');
     });
@@ -47,13 +46,13 @@ const copyToClipboard = (text) => {
     <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">订阅链接</h2>
     
     <div class="border-b border-gray-200 dark:border-white/10">
-        <nav class="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
+        <nav class="-mb-px flex flex-wrap gap-x-4 gap-y-2" aria-label="Tabs">
             <button
                 v-for="tab in tabs"
                 :key="tab.id"
                 @click="activeTab = tab.id"
                 :class="clsx(
-                    'whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors',
+                    'whitespace-nowrap pb-3 px-1 border-b-2 font-medium text-sm transition-colors',
                     activeTab === tab.id 
                         ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' 
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
