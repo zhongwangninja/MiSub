@@ -1,8 +1,7 @@
 <script setup>
 import ThemeToggle from './ThemeToggle.vue';
-import { useSettingsModal } from '../lib/stores.js';
-
-const { showSettingsModal } = useSettingsModal();
+// 修正：直接导入 ref 变量，而不是调用一个不存在的函数
+import { showSettingsModal } from '../lib/stores.js';
 </script>
 
 <template>
