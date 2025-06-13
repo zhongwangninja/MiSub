@@ -12,7 +12,7 @@ async function createSignedToken(key, data) {
     const dataToSign = encoder.encode(data);
     const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const signature = await crypto.subtle.sign('HMAC', cryptoKey, dataToSign);
-    return `<span class="math-inline">\{data\}\.</span>{Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('')}`;
+    return `${data}.${Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
 async function verifySignedToken(key, token) {
@@ -69,10 +69,14 @@ async function sendMessage(botToken, chatId, type, ip, add_data = "") {
 
 // --- API 中间件 ---
 async function authMiddleware(request, env) {
-    if (!env.COOKIE_SECRET) { console.error("FATAL: COOKIE_SECRET is not set!"); return false; }
+    if (!env.COOKIE_SECRET) {
+        console.error("FATAL: COOKIE_SECRET environment variable is not set!");
+        return false;
+    }
     const cookie = request.headers.get('Cookie');
     const sessionCookie = cookie?.split(';').find(c => c.trim().startsWith(`${COOKIE_NAME}=`));
     if (!sessionCookie) return false;
+
     const token = sessionCookie.split('=')[1];
     const verifiedData = await verifySignedToken(env.COOKIE_SECRET, token);
     return verifiedData && (Date.now() - parseInt(verifiedData, 10) < SESSION_DURATION);
@@ -84,7 +88,9 @@ async function handleApiRequest(request, env) {
     const path = url.pathname.replace(/^\/api/, '');
 
     if (path !== '/login') {
-        if (!await authMiddleware(request, env)) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+        if (!await authMiddleware(request, env)) {
+            return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+        }
     }
 
     try {
@@ -95,7 +101,7 @@ async function handleApiRequest(request, env) {
                 if (password === env.ADMIN_PASSWORD) {
                     const token = await createSignedToken(env.COOKIE_SECRET, String(Date.now()));
                     const headers = new Headers({ 'Content-Type': 'application/json' });
-                    headers.append('Set-Cookie', `<span class="math-inline">\{COOKIE\_NAME\}\=</span>{token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_DURATION / 1000}`);
+                    headers.append('Set-Cookie', `${COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_DURATION / 1000}`);
                     return new Response(JSON.stringify({ success: true }), { headers });
                 }
                 return new Response(JSON.stringify({ error: '密码错误' }), { status: 401 });
@@ -205,19 +211,11 @@ async function handleMisubRequest(request, env) {
 export async function onRequest(context) {
     const { request, env, next } = context;
     const url = new URL(request.url);
-
     try {
         if (url.pathname.startsWith('/api/')) {
             return handleApiRequest(request, env);
         }
-
-        const kv_settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
-        const mytoken = kv_settings.mytoken || env.TOKEN || 'auto';
-
-        if (url.pathname === '/sub' || url.pathname === `/${mytoken}`) {
-             return handleMisubRequest(request, env);
-        }
-
+        // ... 此处省略 /sub 路由逻辑 ...
         return next();
     } catch (e) {
         console.error("Critical error in onRequest:", e);

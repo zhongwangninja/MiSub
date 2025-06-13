@@ -2,12 +2,11 @@
 import { ref, onMounted } from 'vue';
 import Dashboard from './components/Dashboard.vue';
 import Login from './components/Login.vue';
-import Header from './components/Header.vue';
-import DashboardSkeleton from './components/DashboardSkeleton.vue'; // 1. 导入骨架屏
+import Header from './components/Header.vue'; // 引入Header
 import { fetchInitialData } from './lib/api.js';
 import { useTheme } from './lib/stores.js';
 
-const { initTheme } = useTheme(); // 2. 获取初始化函数
+const { initTheme } = useTheme();
 
 const sessionState = ref('loading');
 const initialData = ref(null);
@@ -28,21 +27,25 @@ const checkSession = async () => {
 };
 
 const handleLoginSuccess = () => {
+  // 登录成功后，采用最可靠的页面重载方式
   window.location.reload();
 };
 
 onMounted(() => {
-  initTheme(); // 3. 在应用挂载时，立即初始化主题
+  initTheme();
   checkSession();
 });
 </script>
 
 <template>
-  <Header />
-  <main class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-    <div v-if="sessionState === 'loading'">
-      <DashboardSkeleton /> </div>
-    <Dashboard v-else-if="sessionState === 'loggedIn' && initialData" :data="initialData" />
-    <Login v-else @success="handleLoginSuccess" />
-  </main>
+  <div v-if="sessionState === 'loading'" class="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+    <p class="text-gray-800 dark:text-gray-200">正在加载...</p>
+  </div>
+
+  <div v-else-if="sessionState === 'loggedIn' && initialData">
+    <Header />
+    <Dashboard :data="initialData" />
+  </div>
+
+  <Login v-else @success="handleLoginSuccess" />
 </template>

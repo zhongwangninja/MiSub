@@ -1,3 +1,16 @@
+/* 确保根元素充满整个视口高度 */
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: #F9FAFB; /* 浅色模式下的默认背景色 */
+}
+
+/* 暗黑模式下的背景色 */
+html.dark, html.dark body, html.dark #app {
+    background-color: #030712; /* 深灰色 */
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
