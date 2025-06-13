@@ -1,37 +1,58 @@
-import { writable } from 'svelte/store';
+//
+// src/lib/stores.js
+//
+import { reactive, readonly } from 'vue';
 
-// Theme Store
-const createThemeStore = () => {
-    const isBrowser = typeof window !== 'undefined';
-    const initialValue = isBrowser ? localStorage.getItem('theme') || 'dark' : 'dark';
-    const { subscribe, set } = writable(initialValue);
+// --- Theme Store ---
+const themeState = reactive({
+  current: 'dark',
+});
+
+const toggleTheme = () => {
+    themeState.current = themeState.current === 'dark' ? 'light' : 'dark';
+    document.documentElement.classList.toggle('dark', themeState.current === 'dark');
+    localStorage.setItem('theme', themeState.current);
+};
+
+const initTheme = () => {
+    const storedTheme = localStorage.getItem('theme');
+    const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    themeState.current = storedTheme || systemTheme;
+    document.documentElement.classList.toggle('dark', themeState.current === 'dark');
+};
+
+export const useTheme = () => {
+  return {
+    theme: readonly(themeState),
+    toggleTheme,
+    initTheme
+  };
+};
+
+
+// --- Toast Store ---
+const toastState = reactive({
+    message: '',
+    type: 'success',
+    id: 0,
+});
+
+let toastTimeout;
+
+const showToast = (message, type = 'success', duration = 3000) => {
+    toastState.message = message;
+    toastState.type = type;
+    toastState.id = Date.now();
+
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => {
+        toastState.message = '';
+    }, duration);
+};
+
+export const useToast = () => {
     return {
-        subscribe,
-        toggle: () => {
-            if (!isBrowser) return;
-            const newTheme = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
-            document.documentElement.classList.toggle('dark', newTheme === 'dark');
-            localStorage.setItem('theme', newTheme);
-            set(newTheme);
-        },
-        init: () => {
-            if (!isBrowser) return;
-            const storedTheme = localStorage.getItem('theme');
-            const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            const initialTheme = storedTheme || systemTheme;
-            document.documentElement.classList.toggle('dark', initialTheme === 'dark');
-            set(initialTheme);
-        }
+        toast: readonly(toastState),
+        showToast
     };
 };
-export const theme = createThemeStore();
-
-// Toast Store
-const createToastStore = () => {
-    const { subscribe, set } = writable({ message: '', type: 'success' });
-    return {
-        subscribe,
-        show: (message, type = 'success') => set({ message, type, id: Date.now() }),
-    };
-};
-export const toastStore = createToastStore();

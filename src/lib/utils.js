@@ -1,3 +1,6 @@
+//
+// src/lib/utils.js
+//
 export function extractNodeName(url) {
     if (!url) return '';
     url = url.trim();

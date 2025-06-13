@@ -1,3 +1,6 @@
+//
+// src/lib/api.js
+//
 export async function fetchInitialData() {
     try {
         const response = await fetch('/api/data');
@@ -9,6 +12,20 @@ export async function fetchInitialData() {
     } catch (error) {
         console.error("Failed to fetch initial data:", error);
         return null;
+    }
+}
+
+export async function login(password) {
+    try {
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+        });
+        return response; // 返回完整的 response 对象供组件处理
+    } catch (error) {
+        console.error("Login request failed:", error);
+        return { ok: false, error: '网络请求失败' };
     }
 }
 
