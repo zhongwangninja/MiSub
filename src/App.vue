@@ -36,7 +36,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="sessionState === 'loading'" class="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+  <div class="fixed left-0 top-0 -z-10 h-full w-full bg-white dark:bg-gray-950">
+    <div class="absolute top-0 z-[-2] h-screen w-screen bg-[radial-gradient(100%_50%_at_50%_0%,rgba(129,140,248,0.1)_0,rgba(129,140,248,0)_50%,rgba(129,140,248,0)_100%)]"></div>
+  </div>
+
+  <div v-if="sessionState === 'loading'" class="flex items-center justify-center min-h-screen">
     <p>正在加载...</p>
   </div>
   <Dashboard v-else-if="sessionState === 'loggedIn' && initialData" :data="initialData" />

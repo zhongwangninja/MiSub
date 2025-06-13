@@ -18,7 +18,8 @@ const stats = computed(() => [
 
 <template>
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-    <div v-for="stat in stats" :key="stat.name" class="bg-white dark:bg-gray-800/50 p-5 rounded-xl shadow-sm border border-transparent dark:border-white/10">
+    <div v-for="stat in stats" :key="stat.name" 
+         class="bg-white/60 dark:bg-gray-900/50 p-5 rounded-xl shadow-sm ring-1 ring-inset ring-gray-900/5 dark:ring-white/10 transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:ring-indigo-500/30">
       <p class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ stat.name }}</p>
       <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">{{ stat.value }}</p>
     </div>
