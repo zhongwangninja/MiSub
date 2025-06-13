@@ -11,31 +11,27 @@ import Modal from '@/lib/components/Modal.vue';
 import BulkImportModal from '@/lib/components/BulkImportModal.vue';
 import RightPanel from '@/lib/components/RightPanel.vue';
 
-
 const props = defineProps({
   data: Object,
 });
 
 const { showToast } = useToast();
-
 const misubs = ref([]);
 const config = ref({});
 const isLoading = ref(true);
 
 onMounted(() => {
   if (props.data) {
-    misubs.value = props.data.misubs.map(s => ({ ...s, id: crypto.randomUUID(), nodeCount: 0 })) || [];
+    misubs.value = props.data.misubs?.map(s => ({ ...s, id: crypto.randomUUID(), nodeCount: 0 })) || [];
     config.value = props.data.config || {};
   }
   isLoading.value = false;
 });
 
-
 const isSaving = ref(false);
 const subsDirty = ref(false);
 const showDeleteAllModal = ref(false);
 const showBulkImportModal = ref(false);
-
 const currentPage = ref(1);
 const itemsPerPage = 9;
 
@@ -53,14 +49,7 @@ const handleDelete = (id) => {
 };
 
 const handleAdd = () => {
-  misubs.value.unshift({
-    id: crypto.randomUUID(),
-    name: '',
-    url: '',
-    enabled: true,
-    isNew: true,
-    nodeCount: 0
-  });
+  misubs.value.unshift({ id: crypto.randomUUID(), name: '', url: '', enabled: true, isNew: true, nodeCount: 0 });
   currentPage.value = 1;
   showToast('已添加新卡片，请填写并保存');
 };
@@ -95,7 +84,6 @@ const handleBulkImport = (importText) => {
     enabled: true,
     nodeCount: 0,
   }));
-
   misubs.value = [...newSubs, ...misubs.value];
   subsDirty.value = true;
   currentPage.value = 1;
@@ -110,7 +98,6 @@ const changePage = (page) => {
 
 <template>
   <Header />
-
   <main class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
     <div v-if="!isLoading" class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         <div class="lg:col-span-2 space-y-8">
@@ -124,7 +111,6 @@ const changePage = (page) => {
                         <button @click="handleAdd" class="text-sm font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors">新增订阅</button>
                     </div>
                 </div>
-
                 <div v-if="misubs.length > 0">
                   <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                       <Card
@@ -135,7 +121,6 @@ const changePage = (page) => {
                         @change="subsDirty = true"
                       />
                   </div>
-                  
                   <div v-if="totalPages > 1" class="flex justify-center items-center space-x-4 mt-8 text-sm font-medium">
                       <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1" class="px-3 py-1 rounded-md disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-700">&laquo; 上一页</button>
                       <span class="text-gray-500 dark:text-gray-400">第 {{ currentPage }} / {{ totalPages }} 页</span>
@@ -152,7 +137,6 @@ const changePage = (page) => {
         </div>
     </div>
   </main>
-  
   <Transition name="fab">
     <div v-if="subsDirty" class="fixed bottom-8 right-8 z-50">
         <button @click="handleSave" :disabled="isSaving" class="px-5 py-3 bg-green-600 text-white font-semibold rounded-full shadow-lg flex items-center justify-center hover:bg-green-700 transition-all disabled:bg-green-800 disabled:cursor-not-allowed">
@@ -161,22 +145,13 @@ const changePage = (page) => {
         </button>
     </div>
   </Transition>
-
   <BulkImportModal v-model:show="showBulkImportModal" @import="handleBulkImport" />
   <Modal v-model:show="showDeleteAllModal" @confirm="handleDeleteAll">
     <template #title><h3 class="text-lg font-bold text-red-500">确认清空</h3></template>
     <template #body><p class="text-sm text-gray-400">您确定要删除所有订阅源吗？此操作将立即保存且无法恢复。</p></template>
   </Modal>
 </template>
-
 <style scoped>
-.fab-enter-active,
-.fab-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-.fab-enter-from,
-.fab-leave-to {
-  opacity: 0;
-  transform: scale(0.9) translateY(10px);
-}
+.fab-enter-active, .fab-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.fab-enter-from, .fab-leave-to { opacity: 0; transform: scale(0.9) translateY(10px); }
 </style>
