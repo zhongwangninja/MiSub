@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { Transition } from 'vue';
 
 const props = defineProps({
@@ -16,6 +16,11 @@ const handleKeydown = (e) => {
         emit('update:show', false);
     }
 };
+
+const handleConfirm = () => {
+  emit('confirm'); // 先发出确认事件
+  emit('update:show', false); // 再发出事件关闭模态框
+}
 
 onMounted(() => window.addEventListener('keydown', handleKeydown));
 onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
@@ -55,7 +60,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
           <div class="flex justify-end space-x-3 mt-6">
             <button @click="emit('update:show', false)" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold text-sm rounded-lg transition-colors">取消</button>
             <button 
-                @click="emit('confirm')" 
+                @click="handleConfirm" 
                 :disabled="confirmKeyword && confirmInput !== confirmKeyword"
                 class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-lg transition-colors disabled:bg-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
             >确认</button>

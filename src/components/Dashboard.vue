@@ -106,6 +106,7 @@ const changePage = (page) => {
   if (page < 1 || page > totalPages.value) return;
   currentPage.value = page;
 };
+
 </script>
 
 <template>
