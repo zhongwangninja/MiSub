@@ -1,13 +1,11 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import Dashboard from './components/Dashboard.vue';
-import Login from './components/Login.vue';
+import Dashboard from '@/components/Dashboard.vue';
+import Login from '@/components/Login.vue';
 
-// 定义三种状态: loading, loggedIn, loggedOut
 const sessionState = ref('loading');
 const initialData = ref(null);
 
-// 检查会话状态
 const checkSession = async () => {
   try {
     const response = await fetch('/api/data');
@@ -23,13 +21,10 @@ const checkSession = async () => {
   }
 };
 
-// 登录成功后的处理函数
 const handleLoginSuccess = () => {
-  // 采用最稳健的页面重载方式
   window.location.reload();
 };
 
-// 组件挂载后检查会话
 onMounted(checkSession);
 </script>
 
