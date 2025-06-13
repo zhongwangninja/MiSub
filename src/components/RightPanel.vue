@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue'; // 1. 导入 computed
 import clsx from 'clsx';
 import { useToast } from '../lib/stores.js';
 
@@ -10,32 +10,33 @@ const props = defineProps({
 const { showToast } = useToast();
 
 const tabs = [
-    { id: 'sub', query: '', title: '通用' },
-    { id: 'b64', query: 'b64', title: 'Base64' },
-    { id: 'clash', query: 'clash', title: 'Clash' },
-    { id: 'sb', query: 'sb', title: 'Sing-Box' },
-    { id: 'surge', query: 'surge', title: 'Surge' }
+	{ id: 'sub', query: '', title: '通用' },
+	{ id: 'b64', query: 'base64', title: 'Base64' },
+	{ id: 'clash', query: 'clash', title: 'Clash' },
+	{ id: 'sb', query: 'singbox', title: 'Sing-Box' },
+	{ id: 'surge', query: 'surge', title: 'Surge' }
 ];
 
 const activeTab = ref('sub');
-const baseUrl = ref('');
 
-onMounted(() => {
-    if (props.config.mytoken) {
-        baseUrl.value = `${window.location.protocol}//${window.location.host}/sub?token=${props.config.mytoken}`;
+// 2. 将 baseUrl 改为计算属性
+const baseUrl = computed(() => {
+    if (props.config && props.config.mytoken && typeof window !== 'undefined') {
+        return `${window.location.protocol}//${window.location.host}/sub?token=${props.config.mytoken}`;
     }
+    return '';
 });
 
 const copyToClipboard = (text) => {
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(() => {
-            showToast('已复制到剪贴板！');
-        }).catch(err => {
-            showToast('复制失败: ' + err, 'error');
-        });
-    } else {
-        showToast('浏览器不支持 Clipboard API', 'error');
+    if (!text) {
+        showToast('链接为空，无法复制', 'error');
+        return;
     }
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('已复制到剪贴板！');
+    }).catch(err => {
+        showToast('复制失败: ' + err, 'error');
+    });
 };
 </script>
 
@@ -82,6 +83,9 @@ const copyToClipboard = (text) => {
                     </div>
                 </div>
             </div>
+        </div>
+        <div v-else class="text-center text-xs text-gray-400 pt-4">
+            Token 未配置, 无法生成链接
         </div>
     </div>
   </div>

@@ -3,6 +3,9 @@ import { ref, onMounted } from 'vue';
 import Dashboard from './components/Dashboard.vue';
 import Login from './components/Login.vue';
 import { fetchInitialData } from './lib/api.js';
+import { useTheme } from './lib/stores.js'; // 1. 导入 useTheme
+
+const { initTheme } = useTheme(); // 2. 获取初始化函数
 
 const sessionState = ref('loading');
 const initialData = ref(null);
@@ -26,7 +29,10 @@ const handleLoginSuccess = () => {
   window.location.reload();
 };
 
-onMounted(checkSession);
+onMounted(() => {
+  initTheme(); // 3. 在应用挂载时，立即初始化主题
+  checkSession();
+});
 </script>
 
 <template>

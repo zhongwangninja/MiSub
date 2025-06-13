@@ -85,37 +85,37 @@ onMounted(() => {
 
 <template>
   <div class="group bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-white/10 p-4 transition-all duration-300 hover:shadow-lg hover:border-indigo-500/50 relative">
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3 overflow-hidden">
-        <div class="flex-shrink-0 w-6 h-6 text-gray-400 dark:text-gray-500">
-            <component 
-              :is="
-                protocol === 'vmess' ? Vmess :
-                protocol === 'vless' ? Vless :
-                protocol === 'trojan' ? Trojan :
-                protocol === 'ss' ? Ss :
-                protocol === 'hysteria2' ? Hysteria2 :
-                protocol === 'http' ? Http :
-                Clash"
-            />
-        </div>
+    <div class="flex items-start justify-between gap-2">
+      <div class="flex items-center gap-3 overflow-hidden flex-1">
+        <div class="flex-shrink-0 w-6 h-6 text-gray-400 dark:text-gray-500 pt-1">
+          </div>
         <input 
             type="text" 
             ref="nameInput"
             v-model="misubRef.name" 
             @change="emit('change')"
-            class="font-semibold text-lg text-gray-800 dark:text-gray-100 bg-transparent focus:outline-none w-full truncate"
+            class="font-semibold text-lg text-gray-800 dark:text-gray-100 bg-transparent focus:outline-none w-full truncate pt-0.5"
             placeholder="订阅名称"
             :readonly="!isEditing"
             @blur="isEditing = false"
         />
       </div>
-      <div v-if="typeof nodeCount === 'number'" class="text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 rounded-full flex-shrink-0 ml-2">
-          {{ nodeCount }} nodes
+      <div class="flex-shrink-0 flex flex-col items-end">
+        <div class="text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 rounded-full">
+            {{ typeof nodeCount === 'number' ? `${nodeCount} nodes` : '...' }}
+        </div>
+        <div class="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <button @click.stop="isEditing = true; nameInput.focus()" class="p-1.5 rounded-full bg-white/50 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" title="编辑名称">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg>
+            </button>
+            <button @click.stop="emit('delete')" class="p-1.5 rounded-full bg-white/50 dark:bg-gray-800/50 hover:bg-red-500/20 text-red-500" title="删除">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            </button>
+        </div>
       </div>
     </div>
 
-    <div class="mt-3">
+    <div class="mt-2">
         <input
 			type="text"
 			v-model="misubRef.url"
@@ -123,15 +123,6 @@ onMounted(() => {
 			class="w-full text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/50 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
 			placeholder="http://, vmess://, hy2://..."
 		/>
-    </div>
-    
-    <div class="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <button @click.stop="isEditing = true; nameInput.focus()" class="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" title="编辑名称">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg>
-        </button>
-        <button @click.stop="emit('delete')" class="p-1.5 rounded-full hover:bg-red-500/20 text-red-500" title="删除">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-        </button>
     </div>
   </div>
 </template>
