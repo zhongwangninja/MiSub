@@ -42,66 +42,63 @@ const updateNodeCount = async () => {
 const getProtocol = (url) => {
   try {
     if (!url) return 'unknown';
-    // 2. 增加对 hysteria2 的识别
-    if (url.toLowerCase().startsWith('hy2://') || url.toLowerCase().startsWith('hysteria2://')) {
-        return 'hysteria2';
-    }
+    if (url.toLowerCase().startsWith('hy2://') || url.toLowerCase().startsWith('hysteria2://')) return 'hysteria2';
     const u = new URL(url);
     if (u.protocol.startsWith('http')) return 'http';
     return u.protocol.replace(':', '');
-  } catch {
-    return 'unknown';
-  }
+  } catch { return 'unknown'; }
 };
 
 const protocol = computed(() => getProtocol(misubRef.value.url));
 
-const handleUrlChange = () => {
+const handleUrlInput = () => {
   if (!misubRef.value.name || misubRef.value.isNew) {
     const extracted = extractNodeName(misubRef.value.url);
-    if (extracted) {
-      misubRef.value.name = extracted;
-    }
+    if (extracted) misubRef.value.name = extracted;
   }
-  if (misubRef.value.isNew) {
-    misubRef.value.isNew = false;
-  }
-  
+  if (misubRef.value.isNew) misubRef.value.isNew = false;
   clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    updateNodeCount();
-  }, 500);
-
+  debounceTimer = setTimeout(() => updateNodeCount(), 500);
   emit('change');
 };
 
 onMounted(() => {
-  if (isEditing.value) {
-    nameInput.value?.focus();
-  }
+  if (isEditing.value) nameInput.value?.focus();
   updateNodeCount();
 });
 </script>
 
 <template>
-  <div class="group bg-white/60 dark:bg-gray-900/50 rounded-xl shadow-sm ring-1 ring-inset ring-gray-900/5 dark:ring-white/10 p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:ring-indigo-500/30 relative">
+  <div class="group bg-white dark:bg-gray-800 rounded-xl shadow-sm ring-1 ring-inset ring-gray-900/5 dark:ring-white/10 p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:ring-indigo-500/30">
     <div class="flex items-start justify-between gap-2">
-      <div class="flex items-center gap-3 overflow-hidden flex-1">
-        <div class="flex-shrink-0 w-6 h-6 text-indigo-500 dark:text-indigo-400 pt-1">
-          </div>
+      <div class="flex items-center gap-3 overflow-hidden flex-1 pt-1">
+        <div class="flex-shrink-0 w-6 h-6 text-indigo-500 dark:text-indigo-400">
+          <component 
+            :is="
+              protocol === 'vmess' ? Vmess :
+              protocol === 'vless' ? Vless :
+              protocol === 'trojan' ? Trojan :
+              protocol === 'ss' ? Ss :
+              protocol === 'hysteria2' ? Hysteria2 :
+              protocol === 'http' ? Http :
+              Clash"
+          />
+        </div>
         <input 
             type="text" 
             ref="nameInput"
             v-model="misubRef.name" 
             @change="emit('change')"
-            class="font-semibold text-lg text-gray-800 dark:text-gray-100 bg-transparent focus:outline-none w-full truncate pt-0.5"
+            class="font-semibold text-lg text-gray-800 dark:text-gray-100 bg-transparent focus:outline-none w-full truncate"
             placeholder="订阅名称"
             :readonly="!isEditing"
             @blur="isEditing = false"
         />
       </div>
-      <div class="flex-shrink-0 flex flex-col items-end">
-        <div class="text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 rounded-full">
+      
+      <div class="flex-shrink-0 flex items-center gap-2 h-7">
+        <div class="text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 rounded-full transition-opacity duration-200"
+             :class="{'group-hover:opacity-0': misubRef.url}">
             {{ typeof nodeCount === 'number' ? `${nodeCount} nodes` : '...' }}
         </div>
         <div class="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">

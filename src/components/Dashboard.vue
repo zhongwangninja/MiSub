@@ -18,12 +18,14 @@ const props = defineProps({
 const { showToast } = useToast();
 const misubs = ref([]);
 const config = ref({});
+const isLoading = ref(true);
 
 onMounted(() => {
   if (props.data) {
     misubs.value = props.data.misubs?.map(s => ({ ...s, id: crypto.randomUUID(), nodeCount: 0 })) || [];
     config.value = props.data.config || {};
   }
+  isLoading.value = false;
 });
 
 const isSaving = ref(false);
@@ -56,9 +58,17 @@ const handleSave = async () => {
   isSaving.value = true;
   const payload = misubs.value.map(({ id, nodeCount, isNew, ...rest }) => rest);
   const result = await saveMisubs(payload);
+  
+  // --- 关键修改在这里 ---
   if (result.success) {
     showToast('保存成功！', 'success');
     subsDirty.value = false;
+    // 保存成功后，清理所有卡片的 isNew 状态
+    misubs.value.forEach(sub => {
+      if (sub.isNew) {
+        sub.isNew = false;
+      }
+    });
   } else {
     showToast(result.message || '保存失败', 'error');
   }
