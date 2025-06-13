@@ -65,16 +65,11 @@ async function sendMessage(botToken, chatId, type, ip, add_data = "") {
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&parse_mode=HTML&text=${encodeURIComponent(msg)}`);
 }
 
-// --- API 中间件 ---
 async function authMiddleware(request, env) {
-    if (!env.COOKIE_SECRET) {
-        console.error("FATAL: COOKIE_SECRET environment variable is not set!");
-        return false;
-    }
+    if (!env.COOKIE_SECRET) { console.error("FATAL: COOKIE_SECRET is not set!"); return false; }
     const cookie = request.headers.get('Cookie');
     const sessionCookie = cookie?.split(';').find(c => c.trim().startsWith(`${COOKIE_NAME}=`));
     if (!sessionCookie) return false;
-
     const token = sessionCookie.split('=')[1];
     const verifiedData = await verifySignedToken(env.COOKIE_SECRET, token);
     return verifiedData && (Date.now() - parseInt(verifiedData, 10) < SESSION_DURATION);
@@ -207,7 +202,8 @@ async function handleMisubRequest(request, env) {
 	if (ua.includes('clash')) targetFormat = 'clash';
 	else if (ua.includes('sing-box') || ua.includes('singbox')) targetFormat = 'singbox';
 	else if (ua.includes('surge')) targetFormat = 'surge';
-	for (const [key] of url.searchParams.entries()) {
+	
+    for (const [key] of url.searchParams.entries()) {
         if (['clash', 'singbox', 'sb', 'surge', 'quanx', 'loon', 'base64'].includes(key)) {
             targetFormat = key === 'sb' ? 'singbox' : key;
             break;
@@ -233,11 +229,22 @@ async function handleMisubRequest(request, env) {
 export async function onRequest(context) {
     const { request, env, next } = context;
     const url = new URL(request.url);
+
     try {
+        // API 路由
         if (url.pathname.startsWith('/api/')) {
             return handleApiRequest(request, env);
         }
-        // ... 此处省略 /sub 路由逻辑 ...
+    
+        // 订阅链接路由
+        const kv_settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
+        const mytoken = kv_settings.mytoken || env.TOKEN || 'auto';
+        
+        if (url.pathname === '/sub' || url.pathname === `/${mytoken}`) {
+             return handleMisubRequest(request, env);
+        }
+    
+        // 其他所有请求，都交给 Pages 静态资源处理器
         return next();
     } catch (e) {
         console.error("Critical error in onRequest:", e);
