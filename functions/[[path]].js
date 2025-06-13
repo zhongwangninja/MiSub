@@ -3,6 +3,14 @@ const KV_KEY_MAIN = 'misub_data_v1';
 const KV_KEY_SETTINGS = 'worker_settings_v1';
 const COOKIE_NAME = 'auth_session';
 const SESSION_DURATION = 8 * 60 * 60 * 1000;
+const defaultSettings = {
+  FileName: 'MiSub',
+  mytoken: 'auto',
+  BotToken: '',
+  ChatID: '',
+  subConverter: 'subapi.cmliussss.com',
+  subConfig: 'https://raw.githubusercontent.com/cmliu/ACL4SSR/main/Clash/config/ACL4SSR_Online_MultiCountry.ini'
+};
 
 // --- 核心工具函数 (自包含，无外部依赖) ---
 async function createSignedToken(key, data) {
@@ -150,7 +158,8 @@ async function handleApiRequest(request, env) {
             case '/settings': {
                 if (request.method === 'GET') {
                     const settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
-                    return new Response(JSON.stringify(settings), { headers: { 'Content-Type': 'application/json' } });
+                    const merged = { ...defaultSettings, ...settings };
+                    return new Response(JSON.stringify(merged), { headers: { 'Content-Type': 'application/json' } });
                 }
                 if (request.method === 'POST') {
                     const newSettings = await request.json();
@@ -177,7 +186,7 @@ async function handleMisubRequest(request, env) {
     const kv_settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
     const config = {
         mytoken: kv_settings.mytoken || env.TOKEN || 'auto',
-        subConverter: kv_settings.subConverter || env.SUBAPI || 'api.v1.mk',
+        subConverter: kv_settings.subConverter || env.SUBAPI || 'subapi.cmliussss.com',
         subConfig: kv_settings.subConfig || env.SUBCONFIG || 'https://raw.githubusercontent.com/cmliu/ACL4SSR/main/Clash/config/ACL4SSR_Online_MultiCountry.ini',
         FileName: kv_settings.FileName || env.SUBNAME || 'MISUB',
         SUBUpdateTime: kv_settings.SUBUpdateTime || env.SUBUPDATETIME || 6,
