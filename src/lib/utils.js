@@ -14,7 +14,19 @@ export function extractNodeName(url) {
         const protocol = url.substring(0, protocolIndex);
         const mainPart = url.substring(protocolIndex + 3).split('#')[0];
         switch (protocol) {
-            case 'vmess': return JSON.parse(atob(mainPart)).ps || '';
+            case 'vmess': {
+                // 修正：补齐 base64 并解码中文
+                let padded = mainPart.padEnd(mainPart.length + (4 - mainPart.length % 4) % 4, '=');
+                let ps = '';
+                try {
+                    const node = JSON.parse(atob(padded));
+                    ps = node.ps || '';
+                    if (ps) {
+                        ps = decodeURIComponent(escape(ps));
+                    }
+                } catch (e) {}
+                return ps;
+            }
             case 'trojan':
             case 'vless': return mainPart.substring(mainPart.indexOf('@') + 1).split(':')[0] || '';
             case 'ss':
