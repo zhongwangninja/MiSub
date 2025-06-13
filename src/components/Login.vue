@@ -33,7 +33,7 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div class="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 p-4">
+  <div class="flex items-center justify-center h-full p-4">
     <div class="w-full max-w-md mx-auto bg-white dark:bg-gray-800/50 dark:backdrop-blur-sm ring-1 ring-black/5 dark:ring-white/10 shadow-2xl rounded-2xl p-8 text-center">
         <div class="mx-auto mb-6 h-16 w-16 flex items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/50 ring-4 ring-white dark:ring-indigo-500/30">
             <svg class="h-8 w-8 text-indigo-500 dark:text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -57,7 +57,7 @@ const handleSubmit = async () => {
                         name="password" 
                         type="password" 
                         required 
-                        class="w-full bg-gray-100 dark:bg-gray-700/50 border-2 border-gray-300 dark:border-gray-600 rounded-lg p-3 pl-10 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-white transition duration-300 ease-in-out" 
+                        class="w-full bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 rounded-lg p-3 pl-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-white" 
                         placeholder="请输入密码"
                     >
                     <svg class="h-5 w-5 text-gray-400 dark:text-gray-500 absolute top-1/2 left-3 -translate-y-1/2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -69,19 +69,12 @@ const handleSubmit = async () => {
                 <button 
                     type="submit" 
                     :disabled="isLoading"
-                    class="w-full px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-lg disabled:bg-indigo-800 disabled:cursor-not-allowed"
+                    class="w-full px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 disabled:bg-indigo-800 disabled:cursor-not-allowed"
                 >
                     {{ isLoading ? '授权中...' : '授权访问' }}
                 </button>
             </div>
         </form>
-
-        <!-- 新增内容 -->
-        <div class="mt-8 text-gray-500 dark:text-gray-400 text-sm space-y-2">
-            <p>MISUB 是一个现代化的订阅管理工具，旨在帮助用户轻松管理各种网络协议。</p>
-            <p>项目地址: <a href="https://github.com/imzyb/misub" target="_blank" class="text-indigo-500 hover:underline">GitHub 仓库</a></p>
-            <p>如有问题，请联系: <a href="mailto:support@misub.com" class="text-indigo-500 hover:underline">support@misub.com</a></p>
-        </div>
     </div>
   </div>
 </template>
