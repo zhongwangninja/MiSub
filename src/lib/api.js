@@ -55,3 +55,27 @@ export async function fetchNodeCount(subUrl) {
         return { count: 'N/A' };
     }
 }
+
+export async function fetchSettings() {
+    try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) return {};
+        return await response.json();
+    } catch (error) {
+        console.error("Failed to fetch settings:", error);
+        return {};
+    }
+}
+
+export async function saveSettings(settings) {
+    try {
+        const response = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+        return await response.json();
+    } catch (error) {
+        return { success: false, message: '网络请求失败' };
+    }
+}

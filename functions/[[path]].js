@@ -135,14 +135,33 @@ async function handleApiRequest(request, env) {
                 headers.append('Set-Cookie', `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
                 return new Response(JSON.stringify({ success: true }), { headers });
             }
+            case '/settings': {
+                if (request.method === 'GET') {
+                    const settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
+                    return new Response(JSON.stringify(settings), { headers: { 'Content-Type': 'application/json' } });
+                }
+                
+                if (request.method === 'POST') {
+                    const newSettings = await request.json();
+                    const oldSettings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
+                    
+                    // 合并新旧设置，只更新本次提交的字段
+                    const updatedSettings = { ...oldSettings, ...newSettings };
+
+                    await env.MISUB_KV.put(KV_KEY_SETTINGS, JSON.stringify(updatedSettings));
+                    return new Response(JSON.stringify({ success: true, message: '设置已保存' }));
+                }
+
+                return new Response('Method Not Allowed', { status: 405 });
+            }
         }
     } catch (e) {
         console.error(`API Error in path ${path}:`, e);
         return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
     }
+    
     return new Response('API route not found', { status: 404 });
-}
-
+}            
 // --- 订阅生成路由 ---
 async function handleMisubRequest(request, env) {
     const url = new URL(request.url);

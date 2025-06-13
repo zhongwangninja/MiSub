@@ -5,6 +5,7 @@ import { extractNodeName } from '../lib/utils.js';
 import { useToast } from '../lib/stores.js';
 
 import Header from './Header.vue';
+import SettingsModal from './SettingsModal.vue'; // 导入新组件
 import Overview from './Overview.vue';
 import Card from './Card.vue';
 import Modal from './Modal.vue';
@@ -102,9 +103,11 @@ const changePage = (page) => {
   if (page < 1 || page > totalPages.value) return;
   currentPage.value = page;
 };
+const showSettingsModal = ref(false);
 </script>
 
 <template>
+  <Header @open-settings="showSettingsModal = true" />
   <main class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
     <div v-if="!isLoading" class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         <div class="lg:col-span-2 space-y-8">
@@ -178,6 +181,7 @@ const changePage = (page) => {
     <template #title><h3 class="text-lg font-bold text-red-500">确认清空</h3></template>
     <template #body><p class="text-sm text-gray-400">您确定要删除所有订阅源吗？此操作将立即保存且无法恢复。</p></template>
   </Modal>
+  <SettingsModal v-model:show="showSettingsModal" />
 </template>
 <style scoped>
 .fab-enter-active, .fab-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
