@@ -5,13 +5,9 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   resolve: {
+    // 只保留一个 @ 别名，指向 src 目录
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '$api': fileURLToPath(new URL('./src/lib/api.js', import.meta.url)),
-      '$stores': fileURLToPath(new URL('./src/lib/stores.js', import.meta.url)),
-      '$utils': fileURLToPath(new URL('./src/lib/utils.js', import.meta.url)),
-      '$components': fileURLToPath(new URL('./src/lib/components', import.meta.url)),
-      '$icons': fileURLToPath(new URL('./src/lib/icons', import.meta.url)),
     }
   },
   server: {

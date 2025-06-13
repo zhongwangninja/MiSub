@@ -1,15 +1,16 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { saveMisubs } from '$api';
-import { extractNodeName } from '$utils';
-import { useToast } from '$stores';
+import { saveMisubs } from '@/lib/api.js';
+import { extractNodeName } from '@/lib/utils.js';
+import { useToast } from '@/lib/stores.js';
 
-import Header from './Header.vue';
-import Overview from './Overview.vue';
-import Card from './Card.vue';
-import Modal from './Modal.vue';
-import BulkImportModal from './BulkImportModal.vue';
-import RightPanel from './RightPanel.vue';
+import Header from '@/lib/components/Header.vue';
+import Overview from '@/lib/components/Overview.vue';
+import Card from '@/lib/components/Card.vue';
+import Modal from '@/lib/components/Modal.vue';
+import BulkImportModal from '@/lib/components/BulkImportModal.vue';
+import RightPanel from '@/lib/components/RightPanel.vue';
+
 
 const props = defineProps({
   data: Object,
