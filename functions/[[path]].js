@@ -129,6 +129,12 @@ async function handleApiRequest(request, env) {
                  const count = nodes.filter(line => line.trim().includes('://')).length;
                  return new Response(JSON.stringify({ count }), { headers: { 'Content-Type': 'application/json' }});
             }
+            case '/logout': {
+                const headers = new Headers({ 'Content-Type': 'application/json' });
+                // 通过设置一个立刻过期的同名Cookie来清除浏览器中的Cookie
+                headers.append('Set-Cookie', `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
+                return new Response(JSON.stringify({ success: true }), { headers });
+            }
         }
     } catch (e) {
         console.error(`API Error in path ${path}:`, e);

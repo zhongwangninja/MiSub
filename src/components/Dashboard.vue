@@ -129,9 +129,19 @@ const changePage = (page) => {
                       />
                   </div>
                   <div v-if="totalPages > 1" class="flex justify-center items-center space-x-4 mt-8 text-sm font-medium">
-                      <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1" class="px-3 py-1 rounded-md disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-700">&laquo; 上一页</button>
+                      <button 
+                          @click="changePage(currentPage - 1)" 
+                          :disabled="currentPage === 1" 
+                          class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >&laquo; 上一页</button>
+
                       <span class="text-gray-500 dark:text-gray-400">第 {{ currentPage }} / {{ totalPages }} 页</span>
-                      <button @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages" class="px-3 py-1 rounded-md disabled:opacity-50 hover:bg-gray-100 dark:hover:bg-gray-700">下一页 &raquo;</button>
+
+                      <button 
+                          @click="changePage(currentPage + 1)" 
+                          :disabled="currentPage === totalPages"
+                          class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >下一页 &raquo;</button>
                   </div>
                 </div>
                 <div v-else class="text-center py-16 text-gray-500 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
