@@ -103,20 +103,20 @@ const changePage = (page) => {
   if (page < 1 || page > totalPages.value) return;
   currentPage.value = page;
 };
-const showSettingsModal = ref(false);
+
 </script>
 
 <template>
   <main class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-    <div v-if="!isLoading" class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         <div class="lg:col-span-2 space-y-8">
             <Overview :misubs="misubs" />
             <div>
                 <div class="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-white/10 pb-4">
                     <h2 class="text-xl font-bold text-gray-900 dark:text-white">我的订阅</h2>
                     <div class="flex items-center gap-2">
-                        <button @click="showDeleteAllModal = true" class="text-sm px-3 py-1.5 rounded-lg text-red-600 dark:text-red-500 hover:bg-red-500/10 transition-colors">清空所有</button>
-                        <button @click="showBulkImportModal = true" class="text-sm px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-500/10 transition-colors">批量导入</button>
+                        <button @click="showDeleteAllModal = true" class="text-sm px-3 py-1.5 rounded-lg hover:bg-red-500/10 text-red-500 transition-colors">清空所有</button>
+                        <button @click="showBulkImportModal = true" class="text-sm px-3 py-1.5 rounded-lg hover:bg-gray-500/10 dark:hover:bg-white/10 transition-colors">批量导入</button>
                         <button @click="handleAdd" class="text-sm font-semibold px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">新增订阅</button>
                     </div>
                 </div>
