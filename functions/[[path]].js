@@ -32,9 +32,7 @@ async function MD5MD5(text) {
     return Array.from(new Uint8Array(secondPass)).map(b => b.toString(16).padStart(2, '0')).join('').toLowerCase();
 }
 
-function isValidBase64(str) {
-    try { return btoa(atob(str)) == str; } catch (err) { return false; }
-}
+function isValidBase64(str) { try { return btoa(atob(str)) == str; } catch (err) { return false; } }
 
 async function getUrl(targetUrl, userAgentHeader) {
     const newHeaders = new Headers({ 'User-Agent': `MISUB-Client/${userAgentHeader}` });
@@ -48,7 +46,7 @@ async function getSUB(apiUrls, userAgentHeader) {
         if (response.status === 'fulfilled') {
             const text = response.value;
             if (text.includes('://')) { content += text + '\n'; }
-            else if (isValidBase64(text.replace(/\s/g, ''))) { try { content += atob(text) + '\n'; } catch (e) { console.error("Invalid Base64:", e); } }
+            else if (isValidBase64(text.replace(/\s/g, ''))) { try { content += atob(text) + '\n'; } catch (e) {} }
         }
     }
     return content;
@@ -56,15 +54,15 @@ async function getSUB(apiUrls, userAgentHeader) {
 
 async function sendMessage(botToken, chatId, type, ip, add_data = "") {
     if (!botToken || !chatId) return;
-    let msg = `${type}\nIP: <span class="math-inline">\{ip \|\| 'N/A'\}\\n</span>{add_data}`;
+    let msg = `${type}\nIP: ${ip || 'N/A'}\n${add_data}`;
     try {
         const response = await fetch(`http://ip-api.com/json/${ip}?lang=zh-CN`);
         if (response.ok) {
             const ipInfo = await response.json();
-            msg = `${type}\nIP: ${ip}\n地址: ${ipInfo.country}, ${ipInfo.city}\n组织: <span class="math-inline">\{ipInfo\.org\}\\n</span>{add_data}`;
+            msg = `${type}\nIP: ${ip}\n地址: ${ipInfo.country}, ${ipInfo.city}\n组织: ${ipInfo.org}\n${add_data}`;
         }
     } catch (e) {}
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=<span class="math-inline">\{chatId\}&parse\_mode\=HTML&text\=</span>{encodeURIComponent(msg)}`);
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&parse_mode=HTML&text=${encodeURIComponent(msg)}`);
 }
 
 // --- API 中间件 ---
@@ -166,7 +164,7 @@ async function handleApiRequest(request, env) {
 async function handleMisubRequest(request, env) {
     const url = new URL(request.url);
     const userAgentHeader = request.headers.get('User-Agent') || "Unknown";
-
+    
     const kv_settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
     const config = {
         mytoken: kv_settings.mytoken || env.TOKEN || 'auto',
@@ -179,8 +177,8 @@ async function handleMisubRequest(request, env) {
     };
 
     const timeTemp = Math.ceil(Date.now() / (1000 * 60 * 60));
-    const fakeToken = await MD5MD5(`<span class="math-inline">\{config\.mytoken\}</span>{timeTemp}`);
-
+    const fakeToken = await MD5MD5(`${config.mytoken}${timeTemp}`);
+    
     let token = url.searchParams.get('token');
     if (url.pathname === `/${config.mytoken}`) token = config.mytoken;
 
@@ -193,24 +191,23 @@ async function handleMisubRequest(request, env) {
         if (sub.url.toLowerCase().startsWith('http')) urls.push(sub.url);
         else manualNodes += sub.url + '\n';
     }
-
+    
     const subContent = await getSUB(urls, userAgentHeader);
     const combinedContent = (manualNodes + subContent).split('\n').filter(line => line.trim()).join('\n');
     const base64Data = btoa(unescape(encodeURIComponent(combinedContent)));
-
+    
     if (token === fakeToken) return new Response(base64Data);
-
+    
     if (config.BotToken && config.ChatID) {
         await sendMessage(config.BotToken, config.ChatID, `#获取订阅 ${config.FileName}`, request.headers.get('CF-Connecting-IP'), `UA: ${userAgentHeader}`);
     }
 
     let targetFormat = 'base64';
-    const ua = userAgentHeader.toLowerCase();
-    if (ua.includes('clash')) targetFormat = 'clash';
-    else if (ua.includes('sing-box') || ua.includes('singbox')) targetFormat = 'singbox';
-    else if (ua.includes('surge')) targetFormat = 'surge';
-
-    for (const [key, value] of url.searchParams.entries()) {
+	const ua = userAgentHeader.toLowerCase();
+	if (ua.includes('clash')) targetFormat = 'clash';
+	else if (ua.includes('sing-box') || ua.includes('singbox')) targetFormat = 'singbox';
+	else if (ua.includes('surge')) targetFormat = 'surge';
+	for (const [key] of url.searchParams.entries()) {
         if (['clash', 'singbox', 'sb', 'surge', 'quanx', 'loon', 'base64'].includes(key)) {
             targetFormat = key === 'sb' ? 'singbox' : key;
             break;
@@ -218,10 +215,10 @@ async function handleMisubRequest(request, env) {
     }
 
     if (targetFormat === 'base64') return new Response(base64Data, { headers: { "content-type": "text/plain; charset=utf-8", "Profile-Update-Interval": `${config.SUBUpdateTime}` } });
-
-    const callbackUrl = `<span class="math-inline">\{url\.protocol\}//</span>{url.hostname}/sub?token=${fakeToken}`;
-    const subConverterUrl = `https://<span class="math-inline">\{config\.subConverter\}/sub?target\=</span>{targetFormat}&url=<span class="math-inline">\{encodeURIComponent\(callbackUrl\)\}&insert\=false&config\=</span>{encodeURIComponent(config.subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
-
+    
+    const callbackUrl = `${url.protocol}//${url.hostname}/sub?token=${fakeToken}`;
+    const subConverterUrl = `https://${config.subConverter}/sub?target=${targetFormat}&url=${encodeURIComponent(callbackUrl)}&insert=false&config=${encodeURIComponent(config.subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
+    
     try {
         const subConverterResponse = await fetch(subConverterUrl);
         if (!subConverterResponse.ok) return new Response("订阅转换失败", { status: 502 });
