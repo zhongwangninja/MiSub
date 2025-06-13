@@ -1,7 +1,4 @@
-//
-// src/lib/stores.js
-//
-import { reactive, readonly } from 'vue';
+import { reactive, readonly, ref } from 'vue';
 
 // --- Theme Store ---
 const themeState = reactive({
@@ -9,16 +6,21 @@ const themeState = reactive({
 });
 
 const toggleTheme = () => {
-    themeState.current = themeState.current === 'dark' ? 'light' : 'dark';
-    document.documentElement.classList.toggle('dark', themeState.current === 'dark');
-    localStorage.setItem('theme', themeState.current);
+    const newTheme = themeState.current === 'dark' ? 'light' : 'dark';
+    themeState.current = newTheme;
+    if (typeof window !== 'undefined') {
+        document.documentElement.classList.toggle('dark', newTheme === 'dark');
+        localStorage.setItem('theme', newTheme);
+    }
 };
 
 const initTheme = () => {
+    if (typeof window === 'undefined') return;
     const storedTheme = localStorage.getItem('theme');
     const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    themeState.current = storedTheme || systemTheme;
-    document.documentElement.classList.toggle('dark', themeState.current === 'dark');
+    const initialTheme = storedTheme || systemTheme;
+    themeState.current = initialTheme;
+    document.documentElement.classList.toggle('dark', initialTheme === 'dark');
 };
 
 export const useTheme = () => {
@@ -56,5 +58,3 @@ export const useToast = () => {
         showToast
     };
 };
-
-export const showSettingsModal = ref(false);

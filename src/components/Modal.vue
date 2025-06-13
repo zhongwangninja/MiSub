@@ -1,16 +1,36 @@
 <script setup>
+import { onMounted, onUnmounted } from 'vue';
+import { Transition } from 'vue';
+
 const props = defineProps({
   show: Boolean,
+  confirmKeyword: String,
 });
+
 const emit = defineEmits(['update:show', 'confirm']);
+
+const confirmInput = ref('');
+
+const handleKeydown = (e) => {
+    if (e.key === 'Escape') {
+        emit('update:show', false);
+    }
+};
+
+onMounted(() => window.addEventListener('keydown', handleKeydown));
+onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
 </script>
 
 <template>
   <Transition name="modal-fade">
     <div
       v-if="show"
+      role="button"
+      tabindex="0"
       class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99] flex items-center justify-center p-4"
       @click="emit('update:show', false)"
+      @keydown.self.space.prevent="emit('update:show', false)"
+      @keydown.self.enter.prevent="emit('update:show', false)"
     >
       <Transition name="modal-inner">
         <div
@@ -24,13 +44,21 @@ const emit = defineEmits(['update:show', 'confirm']);
             </slot>
           </div>
           <div class="mb-6">
-            <slot name="body">
-              <p class="text-sm text-gray-500 dark:text-gray-400">你确定要继续吗？</p>
+             <slot name="body">
+                <p class="text-sm text-gray-500 dark:text-gray-400">你确定要继续吗？</p>
             </slot>
           </div>
-          <div class="flex justify-end space-x-3">
+          <div v-if="confirmKeyword" class="mt-4">
+            <p class="text-xs text-gray-400 mb-1">请输入 "<span class="font-bold text-red-400">{{ confirmKeyword }}</span>" 以确认:</p>
+            <input type="text" v-model="confirmInput" class="w-full rounded-md bg-gray-100 dark:bg-gray-700 border-transparent focus:ring-indigo-500">
+          </div>
+          <div class="flex justify-end space-x-3 mt-6">
             <button @click="emit('update:show', false)" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold text-sm rounded-lg transition-colors">取消</button>
-            <button @click="emit('confirm')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-lg transition-colors">确认</button>
+            <button 
+                @click="emit('confirm')" 
+                :disabled="confirmKeyword && confirmInput !== confirmKeyword"
+                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-lg transition-colors disabled:bg-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+            >确认</button>
           </div>
         </div>
       </Transition>
