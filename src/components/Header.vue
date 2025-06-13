@@ -1,21 +1,22 @@
 <script setup>
 import ThemeToggle from './ThemeToggle.vue';
-const emit = defineEmits(['open-settings']);
+import { useSettingsModal } from '../lib/stores.js';
 
-const logout = async () => {
-    // 向后端发送登出请求
-    await fetch('/api/logout', { method: 'POST' });
-    // 成功后刷新页面，回到登录页
-    window.location.reload();
-};
+const { showSettingsModal } = useSettingsModal();
 </script>
 
 <template>
   <header class="sticky top-0 z-40 w-full backdrop-blur-lg bg-white/60 dark:bg-gray-950/60 border-b border-gray-200 dark:border-white/10">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:p-8">
       <div class="flex justify-between items-center h-16">
+        
+        <div class="flex items-center gap-3">
+          <svg class="h-8 w-8 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.286Zm-1.5 6.136a.75.75 0 0 1 1.06 0l1.591 1.591a.75.75 0 0 1-1.06 1.06l-1.591-1.591a.75.75 0 0 1 0-1.06Z" /></svg>
+          <h1 class="text-xl font-bold text-gray-900 dark:text-white">MISUB</h1>
+        </div>
+        
         <div class="flex items-center gap-2">
-          <button @click="emit('open-settings')" title="设置" class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+          <button @click="showSettingsModal.value = true" title="设置" class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
           </button>
           <ThemeToggle />

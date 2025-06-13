@@ -56,3 +56,5 @@ export const useToast = () => {
         showToast
     };
 };
+
+export const showSettingsModal = ref(false);

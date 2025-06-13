@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import { saveMisubs } from '../lib/api.js';
 import { extractNodeName } from '../lib/utils.js';
 import { useToast } from '../lib/stores.js';
-
+import { showSettingsModal } from '../lib/stores.js';
 import Header from './Header.vue';
 import SettingsModal from './SettingsModal.vue'; // 导入新组件
 import Overview from './Overview.vue';
@@ -107,7 +107,6 @@ const showSettingsModal = ref(false);
 </script>
 
 <template>
-  <Header @open-settings="showSettingsModal = true" />
   <main class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
     <div v-if="!isLoading" class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         <div class="lg:col-span-2 space-y-8">
