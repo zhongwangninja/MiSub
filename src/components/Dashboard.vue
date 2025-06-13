@@ -114,8 +114,8 @@ const changePage = (page) => {
                 <div class="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-white/10 pb-4">
                     <h2 class="text-xl font-bold text-gray-900 dark:text-white">我的订阅</h2>
                     <div class="flex items-center gap-2">
-                        <button @click="showDeleteAllModal = true" class="text-sm px-3 py-1.5 rounded-lg hover:bg-red-500/10 text-red-500 transition-colors">清空所有</button>
-                        <button @click="showBulkImportModal = true" class="text-sm px-3 py-1.5 rounded-lg hover:bg-gray-500/10 dark:hover:bg-white/10 transition-colors">批量导入</button>
+                        <button @click="showDeleteAllModal = true" class="text-sm px-3 py-1.5 rounded-lg text-red-600 dark:text-red-500 hover:bg-red-500/10 transition-colors">清空所有</button>
+                        <button @click="showBulkImportModal = true" class="text-sm px-3 py-1.5 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">批量导入</button>
                         <button @click="handleAdd" class="text-sm font-semibold px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">新增订阅</button>
                     </div>
                 </div>

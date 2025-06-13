@@ -38,12 +38,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="sessionState === 'loading'" class="bg-gray-50 dark:bg-gray-950">
-    <Header />
-    <main class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+  <Header />
+  
+  <main v-if="sessionState === 'loading'" class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <DashboardSkeleton />
-    </main>
-  </div>
+  </main>
   <Dashboard v-else-if="sessionState === 'loggedIn' && initialData" :data="initialData" />
   <Login v-else @success="handleLoginSuccess" />
 </template>
