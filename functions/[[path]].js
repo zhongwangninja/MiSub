@@ -12,7 +12,7 @@ async function createSignedToken(key, data) {
     const dataToSign = encoder.encode(data);
     const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const signature = await crypto.subtle.sign('HMAC', cryptoKey, dataToSign);
-    return `${data}.${Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('')}`;
+    return `<span class="math-inline">\{data\}\.</span>{Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
 async function verifySignedToken(key, token) {
@@ -43,12 +43,12 @@ async function getUrl(targetUrl, userAgentHeader) {
 
 async function getSUB(apiUrls, userAgentHeader) {
     let content = "";
-    const responses = await Promise.allSettled(apiUrls.map(apiUrl => getUrl(apiUrl, userAgentHeader).then(res => res.ok ? res.text() : Promise.reject())));
+    const responses = await Promise.allSettled(apiUrls.map(apiUrl => getUrl(apiUrl, userAgentHeader).then(res => res.ok ? res.text() : Promise.reject(new Error(`Fetch failed: ${res.status}`)))));
     for (const response of responses) {
         if (response.status === 'fulfilled') {
             const text = response.value;
             if (text.includes('://')) { content += text + '\n'; }
-            else if (isValidBase64(text.replace(/\s/g, ''))) { try { content += atob(text) + '\n'; } catch (e) {} }
+            else if (isValidBase64(text.replace(/\s/g, ''))) { try { content += atob(text) + '\n'; } catch (e) { console.error("Invalid Base64:", e); } }
         }
     }
     return content;
@@ -56,19 +56,20 @@ async function getSUB(apiUrls, userAgentHeader) {
 
 async function sendMessage(botToken, chatId, type, ip, add_data = "") {
     if (!botToken || !chatId) return;
-    let msg = `${type}\nIP: ${ip || 'N/A'}\n${add_data}`;
+    let msg = `${type}\nIP: <span class="math-inline">\{ip \|\| 'N/A'\}\\n</span>{add_data}`;
     try {
         const response = await fetch(`http://ip-api.com/json/${ip}?lang=zh-CN`);
         if (response.ok) {
             const ipInfo = await response.json();
-            msg = `${type}\nIP: ${ip}\n地址: ${ipInfo.country}, ${ipInfo.city}\n组织: ${ipInfo.org}\n${add_data}`;
+            msg = `${type}\nIP: ${ip}\n地址: ${ipInfo.country}, ${ipInfo.city}\n组织: <span class="math-inline">\{ipInfo\.org\}\\n</span>{add_data}`;
         }
     } catch (e) {}
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&parse_mode=HTML&text=${encodeURIComponent(msg)}`);
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=<span class="math-inline">\{chatId\}&parse\_mode\=HTML&text\=</span>{encodeURIComponent(msg)}`);
 }
 
+// --- API 中间件 ---
 async function authMiddleware(request, env) {
-    if (!env.COOKIE_SECRET) return false;
+    if (!env.COOKIE_SECRET) { console.error("FATAL: COOKIE_SECRET is not set!"); return false; }
     const cookie = request.headers.get('Cookie');
     const sessionCookie = cookie?.split(';').find(c => c.trim().startsWith(`${COOKIE_NAME}=`));
     if (!sessionCookie) return false;
@@ -77,65 +78,64 @@ async function authMiddleware(request, env) {
     return verifiedData && (Date.now() - parseInt(verifiedData, 10) < SESSION_DURATION);
 }
 
-
-// --- API 路由逻辑 (添加了日志) ---
+// --- API 路由逻辑 ---
 async function handleApiRequest(request, env) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/^\/api/, '');
-    console.log(`[API] Path: ${path}, Method: ${request.method}`);
 
     if (path !== '/login') {
-        if (!await authMiddleware(request, env)) {
-            return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-        }
+        if (!await authMiddleware(request, env)) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
     }
 
     try {
         switch (path) {
             case '/login': {
-                console.log("[API] Executing /login...");
                 if (request.method !== 'POST') return new Response(null, { status: 405 });
                 const { password } = await request.json();
                 if (password === env.ADMIN_PASSWORD) {
                     const token = await createSignedToken(env.COOKIE_SECRET, String(Date.now()));
                     const headers = new Headers({ 'Content-Type': 'application/json' });
-                    headers.append('Set-Cookie', `${COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_DURATION / 1000}`);
-                    console.log("[API] /login successful.");
+                    headers.append('Set-Cookie', `<span class="math-inline">\{COOKIE\_NAME\}\=</span>{token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_DURATION / 1000}`);
                     return new Response(JSON.stringify({ success: true }), { headers });
                 }
-                console.log("[API] /login failed: Invalid password.");
                 return new Response(JSON.stringify({ error: '密码错误' }), { status: 401 });
             }
             case '/data': {
-                console.log("[API] Executing /data...");
-                if (!env.MISUB_KV) {
-                    console.error("[API /data] FATAL: MISUB_KV binding not found in env.");
-                    return new Response(JSON.stringify({ error: 'Server configuration error: KV binding missing' }), { status: 500 });
-                }
-                console.log("[API /data] Reading settings from KV...");
-                const settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
-                console.log("[API /data] Reading misubs from KV...");
                 const misubs = await env.MISUB_KV.get(KV_KEY_MAIN, 'json') || [];
-                console.log(`[API /data] Found ${misubs.length} misubs.`);
+                const settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
                 const config = { FileName: settings.FileName || 'MISUB', mytoken: settings.mytoken || 'auto' };
-                const responsePayload = JSON.stringify({ misubs, config });
-                console.log("[API /data] Returning successful response.");
-                return new Response(responsePayload, { headers: { 'Content-Type': 'application/json' } });
+                return new Response(JSON.stringify({ misubs, config }), { headers: { 'Content-Type': 'application/json' } });
             }
-            // ... 其他 case ...
+            case '/misubs': {
+                 if (request.method !== 'POST') return new Response(null, { status: 405 });
+                 const { misubs } = await request.json();
+                 if (typeof misubs === 'undefined') return new Response(JSON.stringify({ success: false, message: '请求体中缺少 misubs 字段' }), { status: 400 });
+                 await env.MISUB_KV.put(KV_KEY_MAIN, JSON.stringify(misubs));
+                 return new Response(JSON.stringify({ success: true, message: '订阅源已保存' }));
+            }
+            case '/node_count': {
+                 const { url: subUrl } = await request.json();
+                 const response = await getUrl(subUrl, request.headers.get('User-Agent'));
+                 if (!response.ok) return new Response(JSON.stringify({ count: 'N/A' }));
+                 let text = await response.text();
+                 let nodes;
+                 try { nodes = atob(text).split('\n'); } catch(e) { nodes = text.split('\n'); }
+                 const count = nodes.filter(line => line.trim().includes('://')).length;
+                 return new Response(JSON.stringify({ count }), { headers: { 'Content-Type': 'application/json' }});
+            }
         }
     } catch (e) {
-        console.error(`[API] CRITICAL ERROR in path ${path}:`, e.message, e.stack);
+        console.error(`API Error in path ${path}:`, e);
         return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
     }
     return new Response('API route not found', { status: 404 });
 }
+
+// --- 订阅生成路由 ---
 async function handleMisubRequest(request, env) {
     const url = new URL(request.url);
     const userAgentHeader = request.headers.get('User-Agent') || "Unknown";
-    const userAgent = userAgentHeader.toLowerCase();
-    
-    // 1. 从KV中读取所有配置
+
     const kv_settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
     const config = {
         mytoken: kv_settings.mytoken || env.TOKEN || 'auto',
@@ -147,98 +147,61 @@ async function handleMisubRequest(request, env) {
         ChatID: kv_settings.ChatID || env.TGID || '',
     };
 
-    // 2. 生成并验证Token
-    const timeTemp = Math.ceil(Date.now() / (1000 * 60 * 60)); // 每小时变一次
-    const fakeToken = await MD5MD5(`${config.mytoken}${timeTemp}`);
-    
+    const timeTemp = Math.ceil(Date.now() / (1000 * 60 * 60));
+    const fakeToken = await MD5MD5(`<span class="math-inline">\{config\.mytoken\}</span>{timeTemp}`);
+
     let token = url.searchParams.get('token');
-    if (url.pathname === `/${config.mytoken}`) {
-        token = config.mytoken;
-    }
+    if (url.pathname === `/${config.mytoken}`) token = config.mytoken;
 
-    if (!token || ![config.mytoken, fakeToken].includes(token)) {
-        return new Response('Invalid token', { status: 403 });
-    }
+    if (!token || ![config.mytoken, fakeToken].includes(token)) return new Response('Invalid token', { status: 403 });
 
-    // 3. 从KV获取并聚合所有启用的订阅源
     const misubs = await env.MISUB_KV.get(KV_KEY_MAIN, 'json') || [];
     const enabledMisubs = misubs.filter(sub => sub.enabled);
-    let urls = [];
-    let manualNodes = '';
-
+    let urls = [], manualNodes = '';
     for (const sub of enabledMisubs) {
-        if (sub.url.toLowerCase().startsWith('http')) {
-            urls.push(sub.url);
-        } else {
-            manualNodes += sub.url + '\n';
-        }
+        if (sub.url.toLowerCase().startsWith('http')) urls.push(sub.url);
+        else manualNodes += sub.url + '\n';
     }
-    
+
     const subContent = await getSUB(urls, userAgentHeader);
     const combinedContent = (manualNodes + subContent).split('\n').filter(line => line.trim()).join('\n');
-    
-    // 4. 对聚合内容进行Base64编码 (兼容UTF-8)
     const base64Data = btoa(unescape(encodeURIComponent(combinedContent)));
-    
-    // 5. 如果是内部回调请求，直接返回原始Base64数据
-    if (token === fakeToken) {
-        return new Response(base64Data);
-    }
-    
-    // 6. 发送Telegram通知 (如果已配置)
+
+    if (token === fakeToken) return new Response(base64Data);
+
     if (config.BotToken && config.ChatID) {
         await sendMessage(config.BotToken, config.ChatID, `#获取订阅 ${config.FileName}`, request.headers.get('CF-Connecting-IP'), `UA: ${userAgentHeader}`);
     }
 
-    // 7. 确定最终输出格式
     let targetFormat = 'base64';
-    const ua = userAgent.toLowerCase();
-	if (ua.includes('clash')) targetFormat = 'clash';
-	else if (ua.includes('sing-box') || ua.includes('singbox')) targetFormat = 'singbox';
-	else if (ua.includes('surge')) targetFormat = 'surge';
+    const ua = userAgentHeader.toLowerCase();
+    if (ua.includes('clash')) targetFormat = 'clash';
+    else if (ua.includes('sing-box') || ua.includes('singbox')) targetFormat = 'singbox';
+    else if (ua.includes('surge')) targetFormat = 'surge';
 
-    // URL参数的优先级高于User Agent
-	if (url.searchParams.has('clash')) targetFormat = 'clash';
-	else if (url.searchParams.has('singbox') || url.searchParams.has('sb')) targetFormat = 'singbox';
-	else if (url.searchParams.has('surge')) targetFormat = 'surge';
-    else if (url.searchParams.has('quanx')) targetFormat = 'quanx';
-    else if (url.searchParams.has('loon')) targetFormat = 'loon';
-	else if (url.searchParams.has('base64')) targetFormat = 'base64';
-
-    // 8. 根据格式返回响应
-    if (targetFormat === 'base64') {
-        return new Response(base64Data, { 
-            headers: { 
-                "content-type": "text/plain; charset=utf-8",
-                "Profile-Update-Interval": `${config.SUBUpdateTime}` 
-            } 
-        });
+    for (const [key, value] of url.searchParams.entries()) {
+        if (['clash', 'singbox', 'sb', 'surge', 'quanx', 'loon', 'base64'].includes(key)) {
+            targetFormat = key === 'sb' ? 'singbox' : key;
+            break;
+        }
     }
-    
-    // 9. 调用外部subConverter进行格式转换
-    const callbackUrl = `${url.protocol}//${url.hostname}/sub?token=${fakeToken}`;
-    const subConverterUrl = `https://${config.subConverter}/sub?target=${targetFormat}&url=${encodeURIComponent(callbackUrl)}&insert=false&config=${encodeURIComponent(config.subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
-    
+
+    if (targetFormat === 'base64') return new Response(base64Data, { headers: { "content-type": "text/plain; charset=utf-8", "Profile-Update-Interval": `${config.SUBUpdateTime}` } });
+
+    const callbackUrl = `<span class="math-inline">\{url\.protocol\}//</span>{url.hostname}/sub?token=${fakeToken}`;
+    const subConverterUrl = `https://<span class="math-inline">\{config\.subConverter\}/sub?target\=</span>{targetFormat}&url=<span class="math-inline">\{encodeURIComponent\(callbackUrl\)\}&insert\=false&config\=</span>{encodeURIComponent(config.subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
+
     try {
         const subConverterResponse = await fetch(subConverterUrl);
-        if (!subConverterResponse.ok) {
-            console.error(`Sub-converter failed with status: ${subConverterResponse.status}`);
-            return new Response(`订阅转换服务器返回错误: ${subConverterResponse.status}`, { status: 502 });
-        }
+        if (!subConverterResponse.ok) return new Response("订阅转换失败", { status: 502 });
         const subConverterContent = await subConverterResponse.text();
-        return new Response(subConverterContent, { 
-            headers: { 
-                "Content-Disposition": `attachment; filename*=utf-8''${encodeURIComponent(config.FileName)}`,
-                "content-type": "text/plain; charset=utf-8",
-                "Profile-Update-Interval": `${config.SUBUpdateTime}`
-            } 
-        });
+        return new Response(subConverterContent, { headers: { "Content-Disposition": `attachment; filename*=utf-8''${encodeURIComponent(config.FileName)}`, "content-type": "text/plain; charset=utf-8", "Profile-Update-Interval": `${config.SUBUpdateTime}` } });
     } catch (error) {
-        console.error("Failed to connect to sub-converter:", error);
         return new Response("订阅转换服务器连接失败", { status: 502 });
     }
 }
-// --- Cloudflare Pages Functions 入口 (添加了日志) ---
+
+// --- Cloudflare Pages Functions 入口 ---
 export async function onRequest(context) {
     const { request, env, next } = context;
     const url = new URL(request.url);
@@ -247,14 +210,14 @@ export async function onRequest(context) {
         if (url.pathname.startsWith('/api/')) {
             return handleApiRequest(request, env);
         }
-    
+
         const kv_settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
         const mytoken = kv_settings.mytoken || env.TOKEN || 'auto';
-        
+
         if (url.pathname === '/sub' || url.pathname === `/${mytoken}`) {
              return handleMisubRequest(request, env);
         }
-    
+
         return next();
     } catch (e) {
         console.error("Critical error in onRequest:", e);

@@ -95,7 +95,6 @@ const changePage = (page) => {
 </script>
 
 <template>
-  <Header />
   <main class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
     <div v-if="!isLoading" class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         <div class="lg:col-span-2 space-y-8">
