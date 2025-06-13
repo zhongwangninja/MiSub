@@ -29,16 +29,18 @@ MISUB 是一个现代化的订阅管理工具，旨在帮助用户轻松管理�
 1. 登录到 [Cloudflare 控制面板](https://dash.cloudflare.com/)。
 2. 进入 **Pages** 部分并点击 **Create a project**。
 3. 按照提示连接你的 GitHub 仓库并选择 `misub` 项目。
-4. 在部署完成后，进入 **Settings** > **Environment Variables** 添加以下变量：
+4. 构建框架选择 **Vue** 其他默认
+   ![alt text](image-1.png)
+5. 在部署完成后，进入 **Settings** > **Environment Variables** 添加以下变量：
    - `ADMIN_PASSWORD`: 设置为你想要的管理员密码。
    - `COOKIE_SECRET`: 使用一个随机生成的 32 位字符串（例如：`openssl rand -hex 16`）。
 
-5. 创建 KV 命名空间:
+6. 创建 KV 命名空间:
    - 进入 **Workers & Pages** > **KV**。
    - 创建一个新的命名空间，命名为 `MISUB_KV`。
    ![alt text](image.png)
 
-6. 重新部署项目以应用更改。
+7. 重新部署项目以应用更改。
 
 ## 目录结构
 
