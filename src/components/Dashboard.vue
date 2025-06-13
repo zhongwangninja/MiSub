@@ -4,8 +4,9 @@ import { saveMisubs } from '../lib/api.js';
 import { extractNodeName } from '../lib/utils.js';
 import { useToast } from '../lib/stores.js';
 import { showSettingsModal } from '../lib/stores.js';
+
 import Header from './Header.vue';
-import SettingsModal from './SettingsModal.vue'; // 导入新组件
+import SettingsModal from './SettingsModal.vue';
 import Overview from './Overview.vue';
 import Card from './Card.vue';
 import Modal from './Modal.vue';
@@ -17,6 +18,7 @@ const props = defineProps({
 });
 
 const { showToast } = useToast();
+
 const misubs = ref([]);
 const config = ref({});
 const isLoading = ref(true);
@@ -60,11 +62,9 @@ const handleSave = async () => {
   const payload = misubs.value.map(({ id, nodeCount, isNew, ...rest }) => rest);
   const result = await saveMisubs(payload);
   
-  // --- 关键修改在这里 ---
   if (result.success) {
     showToast('保存成功！', 'success');
     subsDirty.value = false;
-    // 保存成功后，清理所有卡片的 isNew 状态
     misubs.value.forEach(sub => {
       if (sub.isNew) {
         sub.isNew = false;
@@ -103,7 +103,6 @@ const changePage = (page) => {
   if (page < 1 || page > totalPages.value) return;
   currentPage.value = page;
 };
-
 </script>
 
 <template>
