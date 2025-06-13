@@ -2,6 +2,8 @@
 import { ref, onMounted } from 'vue';
 import Dashboard from './components/Dashboard.vue';
 import Login from './components/Login.vue';
+import Header from './components/Header.vue';
+import DashboardSkeleton from './components/DashboardSkeleton.vue';
 import { fetchInitialData } from './lib/api.js';
 import { useTheme } from './lib/stores.js';
 
@@ -36,9 +38,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="sessionState === 'loading'" class="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
-    <p>正在加载...</p>
-  </div>
-  <Dashboard v-else-if="sessionState === 'loggedIn' && initialData" :data="initialData" />
-  <Login v-else @success="handleLoginSuccess" />
+  <Header />
+
+  <main>
+    <div v-if="sessionState === 'loading'" class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      <DashboardSkeleton />
+    </div>
+    <Dashboard v-else-if="sessionState === 'loggedIn' && initialData" :data="initialData" />
+    <Login v-else @success="handleLoginSuccess" />
+  </main>
 </template>
