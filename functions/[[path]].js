@@ -4,7 +4,7 @@ const KV_KEY_SETTINGS = 'worker_settings_v1';
 const COOKIE_NAME = 'auth_session';
 const SESSION_DURATION = 8 * 60 * 60 * 1000;
 
-// --- 核心工具函数 ---
+// --- 核心工具函数 (确保这些函数是完整的) ---
 async function createSignedToken(key, data) {
     if (!key || !data) throw new Error("Key and data are required for signing.");
     const encoder = new TextEncoder();
@@ -67,72 +67,101 @@ async function sendMessage(botToken, chatId, type, ip, add_data = "") {
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&parse_mode=HTML&text=${encodeURIComponent(msg)}`);
 }
 
-// --- API 中间件 ---
+// --- API 中间件 (添加了日志) ---
 async function authMiddleware(request, env) {
-    if (!env.COOKIE_SECRET) return { success: false, error: "COOKIE_SECRET not set" };
+    console.log("[Auth] Running auth middleware...");
+    if (!env.COOKIE_SECRET) {
+        console.error("[Auth] FATAL: COOKIE_SECRET environment variable is not set!");
+        return false;
+    }
     const cookie = request.headers.get('Cookie');
-    const sessionCookie = cookie?.split(';').find(c => c.trim().startsWith(`${COOKIE_NAME}=`));
-    if (!sessionCookie) return { success: false, error: "No session cookie" };
+    if (!cookie) {
+        console.log("[Auth] Failed: No cookie header found.");
+        return false;
+    }
+    const sessionCookie = cookie.split(';').find(c => c.trim().startsWith(`${COOKIE_NAME}=`));
+    if (!sessionCookie) {
+        console.log("[Auth] Failed: auth_session cookie not found in header.");
+        return false;
+    }
     const token = sessionCookie.split('=')[1];
+    console.log("[Auth] Found token, verifying...");
     const verifiedData = await verifySignedToken(env.COOKIE_SECRET, token);
     const isValid = verifiedData && (Date.now() - parseInt(verifiedData, 10) < SESSION_DURATION);
-    return { success: isValid };
+    
+    if(isValid) {
+        console.log("[Auth] Success: Token is valid.");
+    } else {
+        console.log("[Auth] Failed: Token verification failed or session expired.");
+    }
+    return isValid;
 }
 
 // --- 路由处理函数 ---
-async function handleApi(request, env) {
+async function handleApiRequest(request, env) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/^\/api/, '');
-    
+    console.log(`[API] Path: ${path}, Method: ${request.method}`);
+
     if (path !== '/login') {
-        const auth = await authMiddleware(request, env);
-        if (!auth.success) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+        if (!await authMiddleware(request, env)) {
+            return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+        }
     }
 
-    const kv_settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
-    const config = { FileName: kv_settings.FileName || env.SUBNAME || 'MISUB', mytoken: kv_settings.mytoken || env.TOKEN || 'auto' };
-
-    switch (path) {
-        case '/login': {
-            if (request.method !== 'POST') return new Response(null, { status: 405 });
-            try {
+    try {
+        switch (path) {
+            case '/login': {
+                console.log("[API] Executing /login...");
+                // ... 登录逻辑 ...
                 const { password } = await request.json();
                 if (password === env.ADMIN_PASSWORD) {
                     const token = await createSignedToken(env.COOKIE_SECRET, String(Date.now()));
                     const headers = new Headers({ 'Content-Type': 'application/json' });
                     headers.append('Set-Cookie', `${COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_DURATION / 1000}`);
+                    console.log("[API] /login successful.");
                     return new Response(JSON.stringify({ success: true }), { headers });
                 }
+                console.log("[API] /login failed: Invalid password.");
                 return new Response(JSON.stringify({ error: '密码错误' }), { status: 401 });
-            } catch (e) {
-                return new Response(JSON.stringify({ error: '请求格式错误' }), { status: 400 });
             }
-        }
-        case '/data': {
-            const misubs = await env.MISUB_KV.get(KV_KEY_MAIN, 'json') || [];
-            return new Response(JSON.stringify({ misubs, config }), { headers: { 'Content-Type': 'application/json' } });
-        }
-        case '/misubs': {
-             if (request.method !== 'POST') return new Response(null, { status: 405 });
-             const { misubs } = await request.json();
-             if (typeof misubs === 'undefined') return new Response(JSON.stringify({ success: false, message: '请求体中缺少 misubs 字段' }), { status: 400 });
-             await env.MISUB_KV.put(KV_KEY_MAIN, JSON.stringify(misubs));
-             return new Response(JSON.stringify({ success: true, message: '订阅源已保存' }));
-        }
-        case '/node_count': {
-             const { url: subUrl } = await request.json();
-             try {
-                const response = await getUrl(subUrl, request.headers.get('User-Agent'));
-                if (!response.ok) return new Response(JSON.stringify({ count: 'N/A' }));
-                let text = await response.text();
-                let nodes;
-                try { nodes = atob(text).split('\n'); } catch(e) { nodes = text.split('\n'); }
-                const count = nodes.filter(line => line.trim().includes('://')).length;
-                return new Response(JSON.stringify({ count }), { headers: { 'Content-Type': 'application/json' }});
-             } catch (e) { return new Response(JSON.stringify({ count: 'N/A' })); }
-        }
+            case '/data': {
+                console.log("[API] Executing /data...");
+                console.log("[API /data] Reading settings from KV...");
+                const settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
+                console.log("[API /data] Reading misubs from KV...");
+                const misubs = await env.MISUB_KV.get(KV_KEY_MAIN, 'json') || [];
+                console.log(`[API /data] Found ${misubs.length} misubs.`);
+                const config = { FileName: settings.FileName || 'MISUB', mytoken: settings.mytoken || 'auto' };
+                const responsePayload = JSON.stringify({ misubs, config });
+                console.log("[API /data] Returning successful response.");
+                return new Response(responsePayload, { headers: { 'Content-Type': 'application/json' } });
+            }
+            case '/misubs': {
+                 if (request.method !== 'POST') return new Response(null, { status: 405 });
+                 const { misubs } = await request.json();
+                 if (typeof misubs === 'undefined') return new Response(JSON.stringify({ success: false, message: '请求体中缺少 misubs 字段' }), { status: 400 });
+                 await env.MISUB_KV.put(KV_KEY_MAIN, JSON.stringify(misubs));
+                 return new Response(JSON.stringify({ success: true, message: '订阅源已保存' }));
+            }
+            case '/node_count': {
+                 const { url: subUrl } = await request.json();
+                 try {
+                    const response = await getUrl(subUrl, request.headers.get('User-Agent'));
+                    if (!response.ok) return new Response(JSON.stringify({ count: 'N/A' }));
+                    let text = await response.text();
+                    let nodes;
+                    try { nodes = atob(text).split('\n'); } catch(e) { nodes = text.split('\n'); }
+                    const count = nodes.filter(line => line.trim().includes('://')).length;
+                    return new Response(JSON.stringify({ count }), { headers: { 'Content-Type': 'application/json' }});
+                 } catch (e) { return new Response(JSON.stringify({ count: 'N/A' })); }
+            }     
+    } catch (e) {
+        console.error(`[API] CRITICAL ERROR in path ${path}:`, e.message, e.stack);
+        return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
     }
-    return new Response(JSON.stringify({ message: "API handler placeholder" }));
+
+    return new Response('API route not found', { status: 404 });
 }
 
 // --- 订阅生成路由 ---
@@ -204,27 +233,18 @@ async function handleSub(request, env) {
 }
 
 // --- Cloudflare Pages Functions 入口 ---
+// --- Cloudflare Pages Functions 入口 (添加了日志) ---
 export async function onRequest(context) {
     const { request, env, next } = context;
     const url = new URL(request.url);
-
-    try {
-        if (url.pathname.startsWith('/api/')) {
-            return handleApi(request, env);
-        }
     
-        const kv_settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
-        const mytoken = kv_settings.mytoken || env.TOKEN || 'auto';
-        
-        if (url.pathname === '/sub' || url.pathname === `/${mytoken}`) {
-             return handleSub(request, env);
-        }
-    
-        // 将请求传递给 Pages 静态资源处理器
-        return next();
+    console.log(`[onRequest] Entry for path: ${url.pathname}`);
 
-    } catch (e) {
-        console.error("Critical error in onRequest:", e);
-        return new Response("Internal Server Error", { status: 500 });
+    if (url.pathname.startsWith('/api/')) {
+        console.log(`[onRequest] Routing to handleApiRequest...`);
+        return handleApiRequest(request, env);
     }
+    
+    console.log(`[onRequest] Passing to static asset handler...`);
+    return next();
 }
