@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import Dashboard from '@/components/Dashboard.vue';
-import Login from '@/components/Login.vue';
-import { fetchInitialData } from '@/lib/api.js';
+import Dashboard from './components/Dashboard.vue';
+import Login from './components/Login.vue';
+import { fetchInitialData } from './lib/api.js';
 
 const sessionState = ref('loading');
 const initialData = ref(null);
@@ -30,8 +30,8 @@ onMounted(checkSession);
 </script>
 
 <template>
-  <div v-if="sessionState === 'loading'" class="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
-    <p class="text-gray-800 dark:text-gray-200">正在加载...</p>
+  <div v-if="sessionState === 'loading'" class="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+    <p>正在加载...</p>
   </div>
   <Dashboard v-else-if="sessionState === 'loggedIn' && initialData" :data="initialData" />
   <Login v-else @success="handleLoginSuccess" />
