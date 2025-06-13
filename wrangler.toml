@@ -1,13 +1,7 @@
 name = "misub"
 compatibility_date = "2024-06-13"
 
-[pages_build_output]
-dir = "./build"
-# 对于 SvelteKit on Pages with adapter-cloudflare, 我们让 adapter 处理 Functions 集成
-# Functions 目录的约定依然有效
-entry-point = "./build" 
-
 [[kv_namespaces]]
 binding = "MISUB_KV"
-id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # 粘贴你的 KV 命名空间 ID
-preview_id = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy" # 粘贴你的预览 KV 命名空间 ID
+id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # 请确保这里是你正确的 KV ID
+preview_id = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy" # 请确保这里是你正确的预览 KV ID
