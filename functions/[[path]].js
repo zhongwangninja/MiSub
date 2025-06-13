@@ -4,7 +4,7 @@ const KV_KEY_SETTINGS = 'worker_settings_v1';
 const COOKIE_NAME = 'auth_session';
 const SESSION_DURATION = 8 * 60 * 60 * 1000;
 
-// --- 核心工具函数 ---
+// --- 核心工具函数 (自包含，无外部依赖) ---
 async function createSignedToken(key, data) {
     if (!key || !data) throw new Error("Key and data are required for signing.");
     const encoder = new TextEncoder();
@@ -33,6 +33,14 @@ async function MD5MD5(text) {
 }
 
 function isValidBase64(str) { try { return btoa(atob(str)) == str; } catch (err) { return false; } }
+
+function clashFix(content) {
+    if (content.includes('wireguard') && !content.includes('remote-dns-resolve')) {
+        let lines = content.includes('\r\n') ? content.split('\r\n') : content.split('\n');
+        return lines.map(line => line.includes('type: wireguard') ? line.replace(/, udp: true/g, ', remote-dns-resolve: true, udp: true') : line).join('\n');
+    }
+    return content;
+}
 
 async function getUrl(targetUrl, userAgentHeader) {
     const newHeaders = new Headers({ 'User-Agent': `MISUB-Client/${userAgentHeader}` });
@@ -66,20 +74,20 @@ async function sendMessage(botToken, chatId, type, ip, add_data = "") {
 }
 
 async function authMiddleware(request, env) {
-    if (!env.COOKIE_SECRET) { console.error("FATAL: COOKIE_SECRET is not set!"); return false; }
+    if (!env.COOKIE_SECRET) return false;
     const cookie = request.headers.get('Cookie');
     const sessionCookie = cookie?.split(';').find(c => c.trim().startsWith(`${COOKIE_NAME}=`));
     if (!sessionCookie) return false;
     const token = sessionCookie.split('=')[1];
     const verifiedData = await verifySignedToken(env.COOKIE_SECRET, token);
     return verifiedData && (Date.now() - parseInt(verifiedData, 10) < SESSION_DURATION);
-}
+}       
 
-// --- API 路由逻辑 ---
 async function handleApiRequest(request, env) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/^\/api/, '');
 
+    // 对除登录外的所有API请求进行身份验证
     if (path !== '/login') {
         if (!await authMiddleware(request, env)) {
             return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
@@ -88,8 +96,9 @@ async function handleApiRequest(request, env) {
 
     try {
         switch (path) {
+            // 处理登录请求
             case '/login': {
-                if (request.method !== 'POST') return new Response(null, { status: 405 });
+                if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
                 const { password } = await request.json();
                 if (password === env.ADMIN_PASSWORD) {
                     const token = await createSignedToken(env.COOKIE_SECRET, String(Date.now()));
@@ -99,20 +108,34 @@ async function handleApiRequest(request, env) {
                 }
                 return new Response(JSON.stringify({ error: '密码错误' }), { status: 401 });
             }
+
+            // 处理登出请求
+            case '/logout': {
+                const headers = new Headers({ 'Content-Type': 'application/json' });
+                headers.append('Set-Cookie', `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
+                return new Response(JSON.stringify({ success: true }), { headers });
+            }
+
+            // 处理前端初始化时获取数据的请求
             case '/data': {
                 const misubs = await env.MISUB_KV.get(KV_KEY_MAIN, 'json') || [];
                 const settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
                 const config = { FileName: settings.FileName || 'MISUB', mytoken: settings.mytoken || 'auto' };
                 return new Response(JSON.stringify({ misubs, config }), { headers: { 'Content-Type': 'application/json' } });
             }
+
+            // 处理保存订阅列表的请求
             case '/misubs': {
-                 if (request.method !== 'POST') return new Response(null, { status: 405 });
+                 if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
                  const { misubs } = await request.json();
                  if (typeof misubs === 'undefined') return new Response(JSON.stringify({ success: false, message: '请求体中缺少 misubs 字段' }), { status: 400 });
                  await env.MISUB_KV.put(KV_KEY_MAIN, JSON.stringify(misubs));
                  return new Response(JSON.stringify({ success: true, message: '订阅源已保存' }));
             }
+
+            // 处理获取单个订阅链接节点数的请求
             case '/node_count': {
+                 if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
                  const { url: subUrl } = await request.json();
                  const response = await getUrl(subUrl, request.headers.get('User-Agent'));
                  if (!response.ok) return new Response(JSON.stringify({ count: 'N/A' }));
@@ -122,29 +145,20 @@ async function handleApiRequest(request, env) {
                  const count = nodes.filter(line => line.trim().includes('://')).length;
                  return new Response(JSON.stringify({ count }), { headers: { 'Content-Type': 'application/json' }});
             }
-            case '/logout': {
-                const headers = new Headers({ 'Content-Type': 'application/json' });
-                // 通过设置一个立刻过期的同名Cookie来清除浏览器中的Cookie
-                headers.append('Set-Cookie', `${COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
-                return new Response(JSON.stringify({ success: true }), { headers });
-            }
+
+            // 处理设置的读取和保存
             case '/settings': {
                 if (request.method === 'GET') {
                     const settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
                     return new Response(JSON.stringify(settings), { headers: { 'Content-Type': 'application/json' } });
                 }
-                
                 if (request.method === 'POST') {
                     const newSettings = await request.json();
                     const oldSettings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
-                    
-                    // 合并新旧设置，只更新本次提交的字段
                     const updatedSettings = { ...oldSettings, ...newSettings };
-
                     await env.MISUB_KV.put(KV_KEY_SETTINGS, JSON.stringify(updatedSettings));
                     return new Response(JSON.stringify({ success: true, message: '设置已保存' }));
                 }
-
                 return new Response('Method Not Allowed', { status: 405 });
             }
         }
@@ -154,7 +168,7 @@ async function handleApiRequest(request, env) {
     }
     
     return new Response('API route not found', { status: 404 });
-}            
+}
 // --- 订阅生成路由 ---
 async function handleMisubRequest(request, env) {
     const url = new URL(request.url);
@@ -197,16 +211,14 @@ async function handleMisubRequest(request, env) {
         await sendMessage(config.BotToken, config.ChatID, `#获取订阅 ${config.FileName}`, request.headers.get('CF-Connecting-IP'), `UA: ${userAgentHeader}`);
     }
 
-    // --- 【关键修复】重写输出格式判断逻辑 ---
-    let targetFormat = 'base64'; // 默认值
+    // --- 【最终修正】重写输出格式判断逻辑 ---
+    let targetFormat = 'base64';
+    const validFormats = ['clash', 'singbox', 'surge', 'quanx', 'loon', 'base64'];
     const urlTarget = url.searchParams.get('target');
-    const validFormats = ['base64', 'clash', 'singbox', 'surge', 'quanx', 'loon'];
 
-    // 1. 优先使用URL参数 `?target=`
     if (urlTarget && validFormats.includes(urlTarget)) {
         targetFormat = urlTarget;
     } else {
-        // 2. 如果没有URL参数，则根据User-Agent自动判断 (实现通用链接自动适应)
         const ua = userAgentHeader.toLowerCase();
         if (ua.includes('clash')) targetFormat = 'clash';
         else if (ua.includes('sing-box') || ua.includes('singbox')) targetFormat = 'singbox';
@@ -214,33 +226,22 @@ async function handleMisubRequest(request, env) {
         else if (ua.includes('quantumult%20x') || ua.includes('quanx')) targetFormat = 'quanx';
         else if (ua.includes('loon')) targetFormat = 'loon';
     }
-    // --- 修复结束 ---
     
-    // 如果最终计算出的格式是 base64，则直接返回，不进行转换
     if (targetFormat === 'base64') {
-        return new Response(base64Data, { 
-            headers: { 
-                "content-type": "text/plain; charset=utf-8",
-                "Profile-Update-Interval": `${config.SUBUpdateTime}` 
-            } 
-        });
+        return new Response(base64Data, { headers: { "content-type": "text/plain; charset=utf-8", "Profile-Update-Interval": `${config.SUBUpdateTime}` } });
     }
     
-    // 调用外部subConverter进行格式转换
     const callbackUrl = `${url.protocol}//${url.hostname}/sub?token=${fakeToken}`;
     const subConverterUrl = `https://${config.subConverter}/sub?target=${targetFormat}&url=${encodeURIComponent(callbackUrl)}&insert=false&config=${encodeURIComponent(config.subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
     
     try {
         const subConverterResponse = await fetch(subConverterUrl);
         if (!subConverterResponse.ok) return new Response(`订阅转换失败: ${subConverterResponse.status}`, { status: 502 });
-        const subConverterContent = await subConverterResponse.text();
-        return new Response(subConverterContent, { 
-            headers: { 
-                "Content-Disposition": `attachment; filename*=utf-8''${encodeURIComponent(config.FileName)}`,
-                "content-type": "text/plain; charset=utf-8",
-                "Profile-Update-Interval": `${config.SUBUpdateTime}`
-            } 
-        });
+        let subConverterContent = await subConverterResponse.text();
+        if (targetFormat === 'clash') {
+            subConverterContent = clashFix(subConverterContent);
+        }
+        return new Response(subConverterContent, { headers: { "Content-Disposition": `attachment; filename*=utf-8''${encodeURIComponent(config.FileName)}`, "content-type": "text/plain; charset=utf-8", "Profile-Update-Interval": `${config.SUBUpdateTime}` } });
     } catch (error) {
         return new Response("订阅转换服务器连接失败", { status: 502 });
     }
@@ -250,25 +251,14 @@ async function handleMisubRequest(request, env) {
 export async function onRequest(context) {
     const { request, env, next } = context;
     const url = new URL(request.url);
-
     try {
-        // API 路由
-        if (url.pathname.startsWith('/api/')) {
-            return handleApiRequest(request, env);
-        }
-    
-        // 订阅链接路由
+        if (url.pathname.startsWith('/api/')) return handleApiRequest(request, env);
         const kv_settings = await env.MISUB_KV.get(KV_KEY_SETTINGS, 'json') || {};
         const mytoken = kv_settings.mytoken || env.TOKEN || 'auto';
-        
-        if (url.pathname === '/sub' || url.pathname === `/${mytoken}`) {
-             return handleMisubRequest(request, env);
-        }
-    
-        // 其他所有请求，都交给 Pages 静态资源处理器
+        if (url.pathname === '/sub' || url.pathname === `/${mytoken}`) return handleMisubRequest(request, env);
         return next();
     } catch (e) {
         console.error("Critical error in onRequest:", e);
-        return new Response("Internal Server Error", { status: 500 });
+        return new Response("Internal Server Error: " + e.message, { status: 500 });
     }
 }
