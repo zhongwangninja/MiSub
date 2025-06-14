@@ -142,96 +142,62 @@ async function handleApiRequest(request, env) {
                  return new Response(JSON.stringify({ success: true, message: '订阅源已保存' }));
             }
 
-            // 处理获取单个订阅链接节点数的请求
-            // ...existing code...
+            // functions/[[path]].js -> handleApiRequest -> switch (path)
+
             case '/node_count': {
                 if (request.method !== 'POST') {
                     return new Response('Method Not Allowed', { status: 405 });
                 }
                 try {
-                    const rawBody = await request.text();
-                    console.log('收到原始 body:', rawBody);
-                    let subUrl = '';
-                    try {
-                        const body = JSON.parse(rawBody);
-                        subUrl = body.url;
-                    } catch (e) {
-                        console.log('JSON 解析失败:', e);
-                        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-                    }
-                    console.log('收到 node_count 请求:', subUrl);
+                    const { url: subUrl } = await request.json();
 
                     if (!subUrl || typeof subUrl !== 'string' || !/^https?:\/\//.test(subUrl)) {
-                        console.log('参数错误:', subUrl);
                         return new Response(JSON.stringify({ error: 'Invalid or missing url' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
                     }
-
+        
+                    // 使用带10秒超时控制的 getUrl 函数
                     const response = await getUrl(subUrl, request.headers.get('User-Agent'));
                     if (!response.ok) {
-                        console.log('fetch 失败:', response.status);
-                        return new Response(JSON.stringify({ count: 0, error: 'Fetch failed' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                        return new Response(JSON.stringify({ count: 0, error: `Fetch failed: ${response.status}` }), { status: 200, headers: { 'Content-Type': 'application/json' } });
                     }
 
-                    let text = await response.text();
+                    const text = await response.text();
                     let decoded = '';
                     try {
-                        decoded = atob(text);
-                        console.log('atob 解码成功');
+                        decoded = atob(text.replace(/\s/g, ''));
                     } catch (e) {
                         decoded = text;
-                        console.log('atob 解码失败');
                     }
-                    decoded = decoded.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-                    console.log('解码后内容前500字:', decoded.slice(0, 500));                   
-                    
-                    // 打印所有被识别为节点的行
-                    const lines = decoded.split('\n');
-                    lines.forEach((line, idx) => {
-                      if (/^(ss|ssr|vmess|vless|trojan|hysteria2?):\/\//i.test(line.trim())) {
-                        console.log('节点行', idx, ':', line);
-                      }
-                    });
 
-                    // 统计节点数
-                    const nodeLines = lines
-                      .map(line => line.trim())
-                      .filter(line =>
-                        line &&
-                        !line.startsWith('#') &&
-                        /^(ss|ssr|vmess|vless|trojan|hysteria2?):\/\//i.test(line)
-                      );
-                    let count = nodeLines.length;
-                    console.log('最终统计 count:', count);
-
+                    let count = 0;
+                    // 【核心优化】
                     try {
-                        // 尝试 YAML 解析
+                        // 优先尝试 YAML 解析
                         const doc = yaml.load(decoded);
                         if (doc && Array.isArray(doc.proxies)) {
+                            // 如果是 Clash 配置，直接得到数量
                             count = doc.proxies.length;
-                            console.log('YAML 解析成功，proxies 数量:', count);
                         } else {
-                            // fallback: 普通节点统计
-                            const nodeLines = decoded
-                                .split('\n')
-                                .map(line => line.trim())
-                                .filter(line => line && !line.startsWith('#') && /^(ss|ssr|vmess|vless|trojan|hysteria2?):\/\//i.test(line));
-                            count = nodeLines.length;
-                            console.log('YAML 解析失败，正则统计 count:', count);
+                            // 如果不是有效的 Clash 配置，就抛出错误，进入 catch 块
+                            throw new Error('Not a valid Clash config with a proxies array.');
                         }
                     } catch (e) {
-                        // fallback: 普通节点统计
+                        // YAML 解析失败（对普通订阅是正常情况），立刻回退到极速的按行匹配
                         const nodeLines = decoded
                             .split('\n')
                             .map(line => line.trim())
-                            .filter(line => line && !line.startsWith('#') && /^(ss|ssr|vmess|vless|trojan|hysteria2?):\/\//i.test(line));
+                            .filter(line => /^(ss|ssr|vmess|vless|trojan|hysteria2?):\/\//i.test(line));
                         count = nodeLines.length;
-                        console.log('YAML 解析异常，正则统计 count:', count);
                     }
 
                     return new Response(JSON.stringify({ count }), { headers: { 'Content-Type': 'application/json' } });
+
                 } catch (e) {
-                    console.log('异常:', e);
-                    return new Response(JSON.stringify({ count: 0, error: e.message }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                    if (e instanceof SyntaxError) {
+                         return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+                    }
+                    console.error('Critical error in /node_count:', e);
+                    return new Response(JSON.stringify({ count: 0, error: 'An internal error occurred' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
                 }
             }
             // ...existing code...

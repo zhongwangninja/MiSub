@@ -1,13 +1,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { saveMisubs } from '../lib/api.js';
+import { saveMisubs, fetchNodeCount } from '../lib/api.js';
 import { extractNodeName } from '../lib/utils.js';
-import { useToast } from '../lib/stores.js';
-import { showSettingsModal } from '../lib/stores.js';
-import { fetchNodeCount } from '../lib/api.js';
+import { useToast, showSettingsModal } from '../lib/stores.js';
 import SettingsModal from './SettingsModal.vue';
 import Overview from './Overview.vue';
 import Card from './Card.vue';
+import ManualNodeCard from './ManualNodeCard.vue';
 import Modal from './Modal.vue';
 import BulkImportModal from './BulkImportModal.vue';
 import RightPanel from './RightPanel.vue';
@@ -18,248 +17,371 @@ const props = defineProps({
 
 const { showToast } = useToast();
 
-const misubs = ref([]);
+const subscriptions = ref([]);
+const manualNodes = ref([]);
 const config = ref({});
+const isLoading = ref(true);
 
-onMounted(async () => {
-  if (props.data) {
-    misubs.value = props.data.misubs?.map(s => ({
-      ...s,
-      id: crypto.randomUUID(),
-      nodeCount: 0,
-      enabled: s.enabled ?? true
-    })) || [];
-    config.value = props.data.config || {};
-    console.log('初始化 misubs:', misubs.value);
-
-    // 用 for...of 循环保证响应式赋值
-    for (const sub of misubs.value) {
-      try {
-        const count = await fetchNodeCount(sub.url);
-        sub.nodeCount = (typeof count === 'number' && !isNaN(count)) ? count : 0;
-        console.log('节点', sub.name, 'nodeCount:', sub.nodeCount);
-      } catch (e) {
-        sub.nodeCount = 0;
-        console.error('节点', sub.name, '获取 nodeCount 出错:', e);
+const initializeState = () => {
+  isLoading.value = true;
+  if (props.data && props.data.misubs) {
+    const subsData = props.data.misubs || [];
+    const subsArray = [];
+    const nodesArray = [];
+    for (const item of subsData) {
+      const newItem = {
+        ...item,
+        id: crypto.randomUUID(),
+        enabled: item.enabled ?? true,
+        isUpdating: false,
+      };
+      if (/^https?:\/\//.test(item.url)) {
+        subsArray.push({ ...newItem, nodeCount: item.nodeCount || 0 });
+      } else {
+        nodesArray.push(newItem);
       }
     }
-
-    console.log('导入后 misubs:', JSON.stringify(misubs.value || misubs, null, 2));
+    subscriptions.value = subsArray;
+    manualNodes.value = nodesArray;
+    config.value = props.data.config || {};
   }
+  isLoading.value = false;
+};
+
+onMounted(initializeState);
+
+// 【核心修正 A】修正了返回对象的键名，确保与 Overview.vue 匹配
+const stats = computed(() => {
+  const enabledSubscriptions = subscriptions.value.filter(s => s.enabled);
+  const nodesFromSubs = enabledSubscriptions.reduce((acc, sub) => {
+      const count = parseInt(sub.nodeCount, 10);
+      return acc + (isNaN(count) ? 0 : count);
+  }, 0);
+  const enabledManualNodesCount = manualNodes.value.filter(n => n.enabled).length;
+  return {
+      totalSubscriptions: subscriptions.value.length,
+      enabledSubscriptions: enabledSubscriptions.length,
+      totalNodes: nodesFromSubs + enabledManualNodesCount,
+  };
 });
 
+// --- 状态管理 ---
 const subsDirty = ref(false);
-const saveState = ref('idle'); // idle, saving, success
-const showDeleteAllModal = ref(false);
+const saveState = ref('idle');
 const showBulkImportModal = ref(false);
+const showDeleteSubsModal = ref(false);
+const showDeleteNodesModal = ref(false);
+const showEditNodeModal = ref(false);
+const editingNode = ref(null);
+const isNewNode = ref(false);
 const currentPage = ref(1);
 const itemsPerPage = 9;
 
-const totalPages = computed(() => Math.ceil(misubs.value.length / itemsPerPage));
-const paginatedMisubs = computed(() => {
+// 【核心新增】为新增订阅模态框创建状态
+const showAddSubModal = ref(false);
+const newSubscription = ref({ name: '', url: '', enabled: true })
+
+// --- 计算属性 ---
+const totalPages = computed(() => Math.ceil(subscriptions.value.length / itemsPerPage));
+const paginatedSubscriptions = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
   const end = start + itemsPerPage;
-  return misubs.value.slice(start, end);
+  return subscriptions.value.slice(start, end);
 });
 
-const markDirty = () => {
-    subsDirty.value = true;
-    saveState.value = 'idle';
-}
+// --- 核心函数 ---
+const markDirty = () => { subsDirty.value = true; saveState.value = 'idle'; };
 
-const handleDelete = (id) => {
-  misubs.value = misubs.value.filter((s) => s.id !== id);
-  markDirty();
-  showToast('已从列表移除，请点击保存');
+const handleDiscard = () => { initializeState(); subsDirty.value = false; showToast('已放弃所有未保存的更改'); };
+
+const handleUpdateNodeCount = async (subId) => {
+    const subToUpdate = subscriptions.value.find(s => s.id === subId);
+    if (!subToUpdate) return;
+    subToUpdate.isUpdating = true;
+    try {
+        const count = await fetchNodeCount(subToUpdate.url);
+        subToUpdate.nodeCount = typeof count === 'number' ? count : 0;
+        showToast(`${subToUpdate.name} 更新成功！`, 'success');
+        markDirty();
+    } catch (error) { showToast(`${subToUpdate.name} 更新失败`, 'error');} 
+    finally { subToUpdate.isUpdating = false; }
 };
 
-const handleAdd = () => {
-  misubs.value.unshift({ id: crypto.randomUUID(), name: '', url: '', enabled: true, isNew: true, nodeCount: 0 });
+// 【核心改造】新增订阅函数现在只打开模态框
+const handleAddSubscription = () => { newSubscription.value = { name: '', url: '', enabled: true }; showAddSubModal.value = true; };
+
+// 【核心新增】确认添加订阅的函数
+const handleConfirmAddSubscription = () => {
+  if (!newSubscription.value.url) { showToast('订阅链接不能为空', 'error'); return; }
+  const subToAdd = { ...newSubscription.value, id: crypto.randomUUID(), isNew: true, nodeCount: 0, isUpdating: false, };
+  subscriptions.value.unshift(subToAdd);
   currentPage.value = 1;
   markDirty();
-  showToast('已添加新卡片，请填写并保存');
+  showToast('订阅已添加，请点击保存', 'success');
+  handleUpdateNodeCount(subToAdd.id);
+  showAddSubModal.value = false;
+};
+
+const handleDeleteSubscription = (id) => { subscriptions.value = subscriptions.value.filter((s) => s.id !== id); markDirty(); };
+
+const handleAddNode = () => {
+    isNewNode.value = true;
+    editingNode.value = { id: crypto.randomUUID(), name: '', url: '', enabled: true };
+    showEditNodeModal.value = true; };
+
+const handleEditNode = (nodeId) => {
+    const node = manualNodes.value.find(n => n.id === nodeId);
+    if (node) {
+        isNewNode.value = false;
+        editingNode.value = { ...node };
+        showEditNodeModal.value = true;}
+};
+
+const handleSaveNode = () => {
+    if (!editingNode.value || !editingNode.value.url) { showToast('节点链接不能为空', 'error'); return; }
+    if (isNewNode.value) { manualNodes.value.unshift(editingNode.value); } 
+    else { const index = manualNodes.value.findIndex(n => n.id === editingNode.value.id); if (index !== -1) { manualNodes.value[index] = editingNode.value; } }
+    markDirty();
+    showEditNodeModal.value = false;
+};
+
+const handleDeleteNode = (nodeId) => {
+    manualNodes.value = manualNodes.value.filter(n => n.id !== nodeId);
+    markDirty();
 };
 
 const handleSave = async () => {
   saveState.value = 'saving';
-  const payload = misubs.value.map(({ id, nodeCount, isNew, ...rest }) => rest);
-  const result = await saveMisubs(payload);
-  
-  if (result.success) {
-    saveState.value = 'success';
-    misubs.value.forEach(sub => {
-      if (sub.isNew) sub.isNew = false;
-    });
-    setTimeout(() => {
-        subsDirty.value = false;
-        saveState.value = 'idle';
-    }, 1500);
-  } else {
-    showToast(result.message || '保存失败', 'error');
+  const combinedMisubs = [
+    ...subscriptions.value.map(({ isNew, isUpdating, ...rest }) => rest),
+    ...manualNodes.value.map(({ isNew, isUpdating, ...rest }) => rest)
+  ];
+  try {
+    const result = await saveMisubs(combinedMisubs);
+    if (result.success) {
+      saveState.value = 'success';
+      setTimeout(() => {
+          subsDirty.value = false;
+          saveState.value = 'idle';
+      }, 1500);
+    } else { throw new Error(result.message || '保存失败'); }
+  } catch (error) {
+    showToast(error.message, 'error');
     saveState.value = 'idle';
   }
 };
 
-const handleDeleteAll = async () => {
-  misubs.value = [];
-  await handleSave();
-  showDeleteAllModal.value = false;
+const handleDeleteAllSubscriptions = async () => {
+  subscriptions.value = [];
+  markDirty();
+  showDeleteSubsModal.value = false;
 };
 
-// 判断是订阅链接还是单节点链接
-function isSubscriptionUrl(url) {
-  return /^https?:\/\//.test(url);
-}
-
-onMounted(() => {
-  if (props.data) {
-    misubs.value = props.data.misubs?.map(s => ({
-      ...s,
-      id: crypto.randomUUID(),
-      nodeCount: typeof s.nodeCount === 'number'
-        ? s.nodeCount
-        : (isSubscriptionUrl(s.url) ? 0 : 1),
-      enabled: s.enabled ?? true
-    })) || [];
-    config.value = props.data.config || {};
-  }
-});
+const handleDeleteAllNodes = async () => {
+  manualNodes.value = [];
+  markDirty();
+  showDeleteNodesModal.value = false;
+};
 
 const handleBulkImport = async (importText) => {
   if (!importText) return;
-  const lines = importText
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => /^(ss|vmess|trojan|vless|hysteria2?):\/\//.test(line) || /^https?:\/\//.test(line));
-
-  const newSubs = await Promise.all(lines.map(async (line) => {
-    let nodeCount = 0;
-    try {
-      nodeCount = await fetchNodeCount(line);
-      if (typeof nodeCount !== 'number' || isNaN(nodeCount)) nodeCount = 0;
-    } catch (e) {
-    nodeCount = 0;
-    }
-    return {
+  const lines = importText.split('\n').map(line => line.trim()).filter(Boolean);
+  const newSubs = [];
+  const newNodes = [];
+  for (const line of lines) {
+    const newItem = {
       id: crypto.randomUUID(),
-      name: extractNodeName(line) || '未命名节点',
+      name: extractNodeName(line) || '未命名',
       url: line,
       enabled: true,
-      nodeCount,
+      isUpdating: false
     };
-  }));
-
-  misubs.value = [...newSubs, ...misubs.value]; // 不要再 filter nodeCount
+    if (/^https?:\/\//.test(line)) {
+      newSubs.push({ ...newItem, nodeCount: 0 });
+    } else if (/^(ss|vmess|trojan|vless|hysteria2?):\/\//.test(line)) {
+      newNodes.push(newItem);
+    }
+  }
+  subscriptions.value = [...newSubs, ...subscriptions.value];
+  manualNodes.value = [...newNodes, ...manualNodes.value];
   currentPage.value = 1;
   markDirty();
-  showToast(`成功导入 ${lines.length} 条数据，请点击保存`);
+  showToast(`成功导入 ${newSubs.length} 条订阅和 ${newNodes.length} 个手动节点，请点击保存`);
+  newSubs.forEach(sub => handleUpdateNodeCount(sub.id));
 };
 
 const changePage = (page) => {
   if (page < 1 || page > totalPages.value) return;
   currentPage.value = page;
 };
-
 </script>
 
 <template>
-  <div class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+  <div v-if="isLoading" class="text-center py-16 text-gray-500">
+    正在加载...
+  </div>
+  <div v-else class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold text-gray-800 dark:text-white">总览</h1>
+      <div class="flex items-center gap-2">
+        <button @click="showBulkImportModal = true" class="text-sm font-semibold px-4 py-2 rounded-lg text-indigo-600 dark:text-indigo-400 border-2 border-indigo-500/50 hover:bg-indigo-500/10 transition-colors">
+          批量导入
+        </button>
+      </div>
+    </div>
+    
+    <Transition name="slide-fade">
+        <div v-if="subsDirty" class="p-3 mb-6 rounded-lg bg-indigo-600/10 dark:bg-indigo-500/20 ring-1 ring-inset ring-indigo-600/20 flex items-center justify-between">
+            <p class="text-sm font-medium text-indigo-800 dark:text-indigo-200">您有未保存的更改</p>
+            <div class="flex items-center gap-3">
+                <button @click="handleDiscard" class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">
+                    放弃更改
+                </button>
+                <button 
+                    @click="handleSave" 
+                    :disabled="saveState !== 'idle'"
+                    class="px-5 py-2 text-sm text-white font-semibold rounded-lg shadow-sm flex items-center justify-center transition-all duration-300 w-28"
+                    :class="{
+                        'bg-green-600 hover:bg-green-700': saveState === 'idle',
+                        'bg-gray-500 cursor-not-allowed': saveState === 'saving',
+                        'bg-teal-500 cursor-not-allowed': saveState === 'success',
+                    }"
+                >
+                    <div v-if="saveState === 'saving'" class="flex items-center">
+                        <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <span>保存中</span>
+                    </div>
+                    <div v-else-if="saveState === 'success'" class="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                        <span>已保存</span>
+                    </div>
+                    <span v-else>保存更改</span>
+                </button>
+            </div>
+        </div>
+    </Transition>
+    
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         <div class="lg:col-span-2 space-y-8">
-            <Overview :misubs="misubs" />
+            <Overview :stats="stats" />
+            
             <div>
                 <div class="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-white/10 pb-4">
                     <h2 class="text-xl font-bold text-gray-900 dark:text-white">我的订阅</h2>
                     <div class="flex items-center gap-2">
-                        <button @click="showDeleteAllModal = true" class="text-sm px-3 py-1.5 rounded-lg text-red-600 dark:text-red-500 hover:bg-red-500/10 transition-colors">清空所有</button>
-                        <button @click="showBulkImportModal = true" class="text-sm px-3 py-1.5 rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">批量导入</button>
-                        <button @click="handleAdd" class="text-sm font-semibold px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">新增订阅</button>
+                        <button @click="showDeleteSubsModal = true" class="text-sm font-medium px-3 py-1.5 rounded-lg text-red-500 border-2 border-red-500/60 hover:bg-red-500 hover:text-white dark:text-red-400 dark:border-red-400/60 dark:hover:bg-red-400 dark:hover:text-white transition-all">清空订阅</button>
+                        <button @click="handleAddSubscription" class="text-sm font-semibold px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">新增订阅</button>
                     </div>
                 </div>
 
-                <div v-if="misubs.length > 0">
-                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                      <Card
-                        v-for="misub in paginatedMisubs"
-                        :key="misub.id"
-                        :misub="misub"
-                        @delete="handleDelete(misub.id)"
-                        @change="markDirty"
-                      />
-                  </div>
-                  
-                  <div v-if="totalPages > 1" class="flex justify-center items-center space-x-4 mt-8 text-sm font-medium">
-                      <button 
-                          @click="changePage(currentPage - 1)" 
-                          :disabled="currentPage === 1" 
-                          class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
-                      >&laquo; 上一页</button>
-
-                      <span class="text-gray-500 dark:text-gray-400">第 {{ currentPage }} / {{ totalPages }} 页</span>
-
-                      <button 
-                          @click="changePage(currentPage + 1)" 
-                          :disabled="currentPage === totalPages"
-                          class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
-                      >下一页 &raquo;</button>
-                  </div>
+                <div v-if="subscriptions.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <Card
+                    v-for="subscription in paginatedSubscriptions"
+                    :key="subscription.id"
+                    :misub="subscription"
+                    @delete="handleDeleteSubscription(subscription.id)"
+                    @change="markDirty"
+                    @update="handleUpdateNodeCount(subscription.id)"
+                  />
                 </div>
                 <div v-else class="text-center py-16 text-gray-500 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
-                  <div class="inline-block p-4 bg-indigo-100 dark:bg-indigo-900/50 rounded-full">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-indigo-500 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 11h10" />
-                      </svg>
-                  </div>
-                  <h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">你的订阅列表是空的</h3>
-                  <p class="mt-1 text-sm text-gray-500">开始添加你的第一个订阅链接吧！</p>
-                 <div class="mt-6">
-                      <button @click="handleAdd" class="text-sm font-semibold px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">
-                          新增订阅
-                      </button>
-                  </div>
-              </div>
+                  <h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">没有机场订阅</h3>
+                  <p class="mt-1 text-sm text-gray-500">你可以通过批量导入或点击新增。</p>
+                </div>
+                <div v-if="totalPages > 1" class="flex justify-center items-center space-x-4 mt-8 text-sm font-medium">
+                  <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1" class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">&laquo; 上一页</button>
+                  <span class="text-gray-500 dark:text-gray-400">第 {{ currentPage }} / {{ totalPages }} 页</span>
+                  <button @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages" class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">下一页 &raquo;</button>
+                </div>
             </div>
+
+            <div class="mt-4">
+                <div class="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-white/10 pb-4">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">手动节点</h2>
+                     <div class="flex items-center gap-2">
+                        <button @click="showDeleteNodesModal = true" class="text-sm font-medium px-3 py-1.5 rounded-lg text-red-500 border-2 border-red-500/60 hover:bg-red-500 hover:text-white dark:text-red-400 dark:border-red-400/60 dark:hover:bg-red-400 dark:hover:text-white transition-all">清空节点</button>
+                        <button @click="handleAddNode" class="text-sm font-semibold px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">新增节点</button>
+                    </div>
+                </div>
+
+                <div v-if="manualNodes.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <ManualNodeCard 
+                      v-for="node in manualNodes" 
+                      :key="node.id"
+                      :node="node"
+                      @edit="handleEditNode(node.id)"
+                      @delete="handleDeleteNode(node.id)"
+                  />
+                </div>
+                <div v-else class="text-center py-16 text-gray-500 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
+                    <h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">没有手动节点</h3>
+                    <p class="mt-1 text-sm text-gray-500">你可以通过批量导入或点击新增。</p>
+                </div>
+            </div>
+
         </div>
         <div class="lg:col-span-1">
             <RightPanel :config="config" />
         </div>
     </div>
   </div>
-  
-  <Transition name="fab">
-    <div v-if="subsDirty" class="fixed bottom-8 right-8 z-50">
-        <button 
-            @click="handleSave" 
-            :disabled="saveState !== 'idle'"
-            class="px-5 py-3 text-white font-semibold rounded-full shadow-lg flex items-center justify-center transition-all duration-300 w-32"
-            :class="{
-                'bg-green-600 hover:bg-green-700': saveState === 'idle',
-                'bg-gray-500 cursor-not-allowed': saveState === 'saving',
-                'bg-teal-500 cursor-not-allowed': saveState === 'success',
-            }"
-        >
-            <div v-if="saveState === 'saving'" class="flex items-center">
-                <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                <span>保存中</span>
-            </div>
-            <div v-else-if="saveState === 'success'" class="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
-                <span>已保存</span>
-            </div>
-            <span v-else>保存更改</span>
-        </button>
-    </div>
-  </Transition>
 
   <BulkImportModal v-model:show="showBulkImportModal" @import="handleBulkImport" />
-  <Modal v-model:show="showDeleteAllModal" @confirm="handleDeleteAll">
-    <template #title><h3 class="text-lg font-bold text-red-500">确认清空</h3></template>
-    <template #body><p class="text-sm text-gray-400">您确定要删除所有订阅源吗？此操作将立即保存且无法恢复。</p></template>
-  </Modal>
+  <Modal v-model:show="showDeleteSubsModal" @confirm="handleDeleteAllSubscriptions">
+      <template #title><h3 class="text-lg font-bold text-red-500">确认清空订阅</h3></template>
+      <template #body><p class="text-sm text-gray-400">您确定要删除所有**订阅**吗？此操作将标记为待保存，不会影响手动节点。</p></template>
+    </Modal>
+
+    <Modal v-model:show="showDeleteNodesModal" @confirm="handleDeleteAllNodes">
+      <template #title><h3 class="text-lg font-bold text-red-500">确认清空节点</h3></template>
+      <template #body><p class="text-sm text-gray-400">您确定要删除所有**手动节点**吗？此操作将标记为待保存，不会影响订阅。</p></template>
+    </Modal>
+  
+    <Modal v-if="editingNode" v-model:show="showEditNodeModal" @confirm="handleSaveNode">
+      <template #title><h3 class="text-lg font-bold text-gray-800 dark:text-white">{{ isNewNode ? '新增手动节点' : '编辑手动节点' }}</h3></template>
+      <template #body>
+          <div class="space-y-4">
+              <div>
+                  <label for="node-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点名称</label>
+                  <input type="text" id="node-name" v-model="editingNode.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white">
+              </div>
+              <div>
+                  <label for="node-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点链接</label>
+                  <textarea id="node-url" v-model="editingNode.url" rows="4" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white"></textarea>
+              </div>
+          </div>
+      </template>
+    </Modal>
+
+    <Modal v-model:show="showAddSubModal" @confirm="handleConfirmAddSubscription">
+      <template #title><h3 class="text-lg font-bold text-gray-800 dark:text-white">新增订阅</h3></template>
+      <template #body>
+          <div class="space-y-4">
+              <div>
+                  <label for="sub-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">订阅名称</label>
+                  <input type="text" id="sub-name" v-model="newSubscription.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white">
+              </div>
+              <div>
+                  <label for="sub-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">订阅链接</label>
+                  <input type="text" id="sub-url" v-model="newSubscription.url" placeholder="https://..." class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white">
+              </div>
+          </div>
+      </template>
+    </Modal>
   <SettingsModal v-model:show="showSettingsModal" />
 </template>
 
 <style scoped>
-.fab-enter-active, .fab-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
-.fab-enter-from, .fab-leave-to { opacity: 0; transform: scale(0.9) translateY(10px); }
+/* 用于顶部横幅的滑入滑出动画 */
+.slide-fade-enter-active {
+  transition: all 0.3s ease-out;
+}
+.slide-fade-leave-active {
+  transition: all 0.3s cubic-bezier(1, 0.5, 0.8, 1);
+}
+.slide-fade-enter-from,
+.slide-fade-leave-to {
+  transform: translateY(-20px);
+  opacity: 0;
+}
 </style>

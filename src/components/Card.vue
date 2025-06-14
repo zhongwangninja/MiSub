@@ -1,15 +1,6 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
-import { fetchNodeCount } from '../lib/api.js';
+import { ref, computed, nextTick } from 'vue';
 import { extractNodeName } from '../lib/utils.js';
-
-import Vmess from '../icons/Vmess.vue';
-import Trojan from '../icons/Trojan.vue';
-import Ss from '../icons/Ss.vue';
-import Http from '../icons/Http.vue';
-import Clash from '../icons/Clash.vue';
-import Hysteria2 from '../icons/Hysteria2.vue';
-import Vless from '../icons/Vless.vue';
 
 const props = defineProps({
   misub: {
@@ -18,116 +9,130 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['delete', 'change']);
+const emit = defineEmits(['delete', 'change', 'update']);
+
 const isEditing = ref(props.misub.isNew || false);
 const nameInput = ref(null);
 
-let debounceTimer;
+const handleEditClick = () => {
+  isEditing.value = true;
+  nextTick(() => {
+    nameInput.value?.focus();
+    nameInput.value?.select();
+  });
+};
 
-// Card.vue
-const updateNodeCount = async () => {
-  if (props.misub.url && props.misub.url.startsWith('http')) {
-    const count = await fetchNodeCount(props.misub.url);
-    props.misub.nodeCount = typeof count === 'number' ? count : 0;
-  } else if (props.misub.url) {
-    props.misub.nodeCount = 1;
-  } else {
-    props.misub.nodeCount = 0;
+const handleNameBlur = () => {
+  isEditing.value = false;
+  emit('change');
+}
+
+const handleUrlInput = () => {
+  if (!props.misub.name || props.misub.isNew) {
+    const extracted = extractNodeName(props.misub.url);
+    if (extracted) props.misub.name = extracted;
   }
+  if (props.misub.isNew) props.misub.isNew = false;
   emit('change');
 };
 
 const getProtocol = (url) => {
   try {
     if (!url) return 'unknown';
-    if (url.toLowerCase().startsWith('hy2://') || url.toLowerCase().startsWith('hysteria2://')) return 'hysteria2';
-    const u = new URL(url);
-    if (u.protocol.startsWith('http')) return 'http';
-    return u.protocol.replace(':', '');
-  } catch { return 'unknown'; }
+    const lowerUrl = url.toLowerCase();
+    // 【核心修正】精确区分 https 和 http
+    if (lowerUrl.startsWith('https://')) return 'https';
+    if (lowerUrl.startsWith('http://')) return 'http';
+    if (lowerUrl.includes('clash')) return 'clash';
+  } catch { 
+    return 'unknown';
+  }
+  return 'unknown';
 };
 
 const protocol = computed(() => getProtocol(props.misub.url));
 
-const handleUrlInput = () => {
-  if (!props.misub.name || props.misub.isNew) {
-    const extracted = extractNodeName(props.misub.url);
-    if (extracted) props.misub.name = extracted; // ← 这里修正
+const protocolStyle = computed(() => {
+  const p = protocol.value;
+  switch (p) {
+    case 'https':
+      return { text: 'HTTPS', style: 'bg-green-500/20 text-green-500 dark:text-green-400' };
+    case 'clash':
+      return { text: 'CLASH', style: 'bg-sky-500/20 text-sky-500 dark:text-sky-400' };
+    case 'http':
+      return { text: 'HTTP', style: 'bg-gray-500/20 text-gray-500 dark:text-gray-400' };
+    default:
+      return { text: 'SUB', style: 'bg-gray-500/20 text-gray-500 dark:text-gray-400' };
   }
-  if (props.misub.isNew) props.misub.isNew = false;
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => updateNodeCount(), 500);
-  emit('change');
-};
-
-onMounted(() => {
-  if (isEditing.value) nameInput.value?.focus();
-  if (!props.misub.nodeCount) updateNodeCount();
 });
-
-// 新增：监听 url 变化自动更新节点数
-watch(
-  () => props.misub.url,
-  (newUrl, oldUrl) => {
-    if (newUrl !== oldUrl) {
-      updateNodeCount();
-    }
-  }
-);
 </script>
 
 <template>
-  <div class="group bg-white/[.03] dark:bg-white/[.03] rounded-xl shadow-sm ring-1 ring-inset ring-gray-900/5 dark:ring-white/10 p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:ring-indigo-400/30 relative">
-    <div class="flex items-start justify-between gap-2">
-      <div class="flex items-center gap-3 overflow-hidden flex-1 pt-1">
-        <div class="flex-shrink-0 w-6 h-6 text-indigo-500 dark:text-indigo-400">
-          <component 
-            :is="
-              protocol === 'vmess' ? Vmess :
-              protocol === 'vless' ? Vless :
-              protocol === 'trojan' ? Trojan :
-              protocol === 'ss' ? Ss :
-              protocol === 'hysteria2' ? Hysteria2 :
-              protocol === 'http' ? Http :
-              Clash"
-          />
+  <div 
+    class="group bg-white/50 dark:bg-gray-900/60 backdrop-blur-sm rounded-2xl shadow-lg dark:shadow-2xl ring-1 ring-black/5 p-5 transition-all duration-300 hover:-translate-y-1 flex flex-col h-full min-h-[190px]"
+    :class="{ 'opacity-50': !misub.enabled, 'ring-indigo-500/50': misub.isNew }"
+  >
+    <div class="flex items-start justify-between gap-3">
+      <div class="w-full truncate">
+        <div class="flex items-center gap-2 mb-1">
+          <div 
+            class="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+            :class="protocolStyle.style"
+          >
+            {{ protocolStyle.text }}
+          </div>
         </div>
+        <p v-if="!isEditing" class="font-bold text-xl text-gray-800 dark:text-gray-100 truncate cursor-pointer" @click="handleEditClick" :title="misub.name || '未命名订阅'">
+          {{ misub.name || '未命名订阅' }}
+        </p>
         <input 
+            v-else
             type="text" 
             ref="nameInput"
-            v-model="props.misub.name" 
-            @change="emit('change')"
-            class="font-semibold text-lg text-gray-800 dark:text-gray-100 bg-transparent focus:outline-none w-full truncate"
+            v-model="misub.name" 
+            @blur="handleNameBlur"
+            @keyup.enter="handleNameBlur"
+            class="font-bold text-xl text-gray-800 dark:text-gray-100 bg-transparent focus:outline-none w-full"
             placeholder="订阅名称"
-            :readonly="!isEditing"
-            @blur="isEditing = false"
         />
       </div>
       
-      <div class="flex-shrink-0 flex items-center gap-2 h-7">
-        <div class="text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 rounded-full transition-opacity duration-200"
-             :class="{'group-hover:opacity-0': props.misub.url}">
-            {{ (typeof props.misub.nodeCount === 'number' && !isNaN(props.misub.nodeCount)) ? `${props.misub.nodeCount} nodes` : '0 nodes' }}
-        </div>
-        <div class="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <button @click.stop="isEditing = true; nameInput.focus()" class="p-1.5 rounded-full bg-white/50 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" title="编辑名称">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg>
-            </button>
-            <button @click.stop="emit('delete')" class="p-1.5 rounded-full bg-white/50 dark:bg-gray-800/50 hover:bg-red-500/20 text-red-500" title="删除">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-            </button>
-        </div>
+      <div class="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <button @click.stop="handleEditClick" class="p-1.5 rounded-full hover:bg-gray-500/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" title="编辑名称">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg>
+          </button>
+          <button @click.stop="emit('delete')" class="p-1.5 rounded-full hover:bg-red-500/10 text-gray-400 hover:text-red-500" title="删除">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          </button>
       </div>
     </div>
 
-    <div class="mt-2">
+    <div class="mt-3 flex-grow">
         <input
-			type="text"
-			v-model="props.misub.url"
-            @input="handleUrlInput"
-			class="w-full text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/50 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-			placeholder="http://, vmess://, hy2://..."
+            type="text"
+			v-model="misub.url"
+            @input="emit('change')"
+			class="w-full text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800/50 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+			placeholder="https://..."
 		/>
+    </div>
+    
+    <div class="flex justify-between items-center mt-4">
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" v-model="misub.enabled" @change="emit('change')" class="sr-only peer">
+        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+      </label>
+      
+      <div class="flex items-center space-x-3">
+        <span class="text-sm font-semibold" :class="misub.isUpdating ? 'text-yellow-500 animate-pulse' : 'text-gray-700 dark:text-gray-300'">
+            {{ misub.isUpdating ? '更新中...' : `${misub.nodeCount} Nodes` }}
+        </span>
+        <button @click="emit('update')" :disabled="misub.isUpdating" class="text-gray-400 hover:text-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="更新节点数">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" :class="{'animate-spin': misub.isUpdating}" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+            </svg>
+        </button>
+      </div>
     </div>
   </div>
 </template>
