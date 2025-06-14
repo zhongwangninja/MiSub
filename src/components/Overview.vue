@@ -9,7 +9,9 @@ const props = defineProps({
 // 1. 创建基于 props 的计算属性
 const totalMisubs = computed(() => props.misubs?.length || 0);
 const enabledMisubs = computed(() => props.misubs?.filter(s => s.enabled).length || 0);
-const totalNodes = computed(() => props.misubs?.reduce((acc, sub) => acc + (sub.nodeCount || 0), 0) || 0);
+const totalNodes = computed(() =>
+  props.misubs?.reduce((acc, sub) => acc + (typeof sub.nodeCount === 'number' ? sub.nodeCount : 0), 0) || 0
+);
 
 // 2. 将计算属性传入动画计数器，得到用于显示的新变量
 const displayTotal = useAnimatedCounter(totalMisubs);

@@ -4,7 +4,7 @@ import { saveMisubs } from '../lib/api.js';
 import { extractNodeName } from '../lib/utils.js';
 import { useToast } from '../lib/stores.js';
 import { showSettingsModal } from '../lib/stores.js';
-
+import { fetchNodeCount } from '../lib/api.js';
 import SettingsModal from './SettingsModal.vue';
 import Overview from './Overview.vue';
 import Card from './Card.vue';
@@ -21,10 +21,30 @@ const { showToast } = useToast();
 const misubs = ref([]);
 const config = ref({});
 
-onMounted(() => {
+onMounted(async () => {
   if (props.data) {
-    misubs.value = props.data.misubs?.map(s => ({ ...s, id: crypto.randomUUID(), nodeCount: 0, enabled: s.enabled ?? true })) || [];
+    misubs.value = props.data.misubs?.map(s => ({
+      ...s,
+      id: crypto.randomUUID(),
+      nodeCount: 0,
+      enabled: s.enabled ?? true
+    })) || [];
     config.value = props.data.config || {};
+    console.log('初始化 misubs:', misubs.value);
+
+    // 用 for...of 循环保证响应式赋值
+    for (const sub of misubs.value) {
+      try {
+        const count = await fetchNodeCount(sub.url);
+        sub.nodeCount = (typeof count === 'number' && !isNaN(count)) ? count : 0;
+        console.log('节点', sub.name, 'nodeCount:', sub.nodeCount);
+      } catch (e) {
+        sub.nodeCount = 0;
+        console.error('节点', sub.name, '获取 nodeCount 出错:', e);
+      }
+    }
+
+    console.log('导入后 misubs:', JSON.stringify(misubs.value || misubs, null, 2));
   }
 });
 
@@ -86,17 +106,50 @@ const handleDeleteAll = async () => {
   showDeleteAllModal.value = false;
 };
 
-const handleBulkImport = (importText) => {
+// 判断是订阅链接还是单节点链接
+function isSubscriptionUrl(url) {
+  return /^https?:\/\//.test(url);
+}
+
+onMounted(() => {
+  if (props.data) {
+    misubs.value = props.data.misubs?.map(s => ({
+      ...s,
+      id: crypto.randomUUID(),
+      nodeCount: typeof s.nodeCount === 'number'
+        ? s.nodeCount
+        : (isSubscriptionUrl(s.url) ? 0 : 1),
+      enabled: s.enabled ?? true
+    })) || [];
+    config.value = props.data.config || {};
+  }
+});
+
+const handleBulkImport = async (importText) => {
   if (!importText) return;
-  const lines = importText.split('\n').map(line => line.trim()).filter(Boolean);
-  const newSubs = lines.map(line => ({
-    id: crypto.randomUUID(),
-    name: extractNodeName(line) || '未命名节点',
-    url: line,
-    enabled: true,
-    nodeCount: 0,
+  const lines = importText
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => /^(ss|vmess|trojan|vless|hysteria2?):\/\//.test(line) || /^https?:\/\//.test(line));
+
+  const newSubs = await Promise.all(lines.map(async (line) => {
+    let nodeCount = 0;
+    try {
+      nodeCount = await fetchNodeCount(line);
+      if (typeof nodeCount !== 'number' || isNaN(nodeCount)) nodeCount = 0;
+    } catch (e) {
+    nodeCount = 0;
+    }
+    return {
+      id: crypto.randomUUID(),
+      name: extractNodeName(line) || '未命名节点',
+      url: line,
+      enabled: true,
+      nodeCount,
+    };
   }));
-  misubs.value = [...newSubs, ...misubs.value];
+
+  misubs.value = [...newSubs, ...misubs.value]; // 不要再 filter nodeCount
   currentPage.value = 1;
   markDirty();
   showToast(`成功导入 ${lines.length} 条数据，请点击保存`);

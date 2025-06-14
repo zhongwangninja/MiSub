@@ -12,29 +12,27 @@ import Hysteria2 from '../icons/Hysteria2.vue';
 import Vless from '../icons/Vless.vue';
 
 const props = defineProps({
-  misub: Object
+  misub: {
+    type: Object,
+    required: true
+  }
 });
 
 const emit = defineEmits(['delete', 'change']);
-
-const nodeCount = ref('...');
 const isEditing = ref(props.misub.isNew || false);
 const nameInput = ref(null);
-const misubRef = ref(props.misub);
 
 let debounceTimer;
 
+// Card.vue
 const updateNodeCount = async () => {
-  if (misubRef.value.url && misubRef.value.url.startsWith('http')) {
-    const data = await fetchNodeCount(misubRef.value.url);
-    nodeCount.value = data.count;
-    misubRef.value.nodeCount = typeof data.count === 'number' ? data.count : 0;
-  } else if (misubRef.value.url) {
-    nodeCount.value = 1;
-    misubRef.value.nodeCount = 1;
+  if (props.misub.url && props.misub.url.startsWith('http')) {
+    const count = await fetchNodeCount(props.misub.url);
+    props.misub.nodeCount = typeof count === 'number' ? count : 0;
+  } else if (props.misub.url) {
+    props.misub.nodeCount = 1;
   } else {
-    nodeCount.value = 0;
-    misubRef.value.nodeCount = 0;
+    props.misub.nodeCount = 0;
   }
   emit('change');
 };
@@ -49,14 +47,14 @@ const getProtocol = (url) => {
   } catch { return 'unknown'; }
 };
 
-const protocol = computed(() => getProtocol(misubRef.value.url));
+const protocol = computed(() => getProtocol(props.misub.url));
 
 const handleUrlInput = () => {
-  if (!misubRef.value.name || misubRef.value.isNew) {
-    const extracted = extractNodeName(misubRef.value.url);
-    if (extracted) misubRef.value.name = extracted;
+  if (!props.misub.name || props.misub.isNew) {
+    const extracted = extractNodeName(props.misub.url);
+    if (extracted) props.misub.name = extracted; // ← 这里修正
   }
-  if (misubRef.value.isNew) misubRef.value.isNew = false;
+  if (props.misub.isNew) props.misub.isNew = false;
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => updateNodeCount(), 500);
   emit('change');
@@ -64,8 +62,18 @@ const handleUrlInput = () => {
 
 onMounted(() => {
   if (isEditing.value) nameInput.value?.focus();
-  updateNodeCount();
+  if (!props.misub.nodeCount) updateNodeCount();
 });
+
+// 新增：监听 url 变化自动更新节点数
+watch(
+  () => props.misub.url,
+  (newUrl, oldUrl) => {
+    if (newUrl !== oldUrl) {
+      updateNodeCount();
+    }
+  }
+);
 </script>
 
 <template>
@@ -87,7 +95,7 @@ onMounted(() => {
         <input 
             type="text" 
             ref="nameInput"
-            v-model="misubRef.name" 
+            v-model="props.misub.name" 
             @change="emit('change')"
             class="font-semibold text-lg text-gray-800 dark:text-gray-100 bg-transparent focus:outline-none w-full truncate"
             placeholder="订阅名称"
@@ -98,8 +106,8 @@ onMounted(() => {
       
       <div class="flex-shrink-0 flex items-center gap-2 h-7">
         <div class="text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 px-2 py-0.5 rounded-full transition-opacity duration-200"
-             :class="{'group-hover:opacity-0': misubRef.url}">
-            {{ typeof nodeCount === 'number' ? `${nodeCount} nodes` : '...' }}
+             :class="{'group-hover:opacity-0': props.misub.url}">
+            {{ (typeof props.misub.nodeCount === 'number' && !isNaN(props.misub.nodeCount)) ? `${props.misub.nodeCount} nodes` : '0 nodes' }}
         </div>
         <div class="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
             <button @click.stop="isEditing = true; nameInput.focus()" class="p-1.5 rounded-full bg-white/50 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400" title="编辑名称">
@@ -115,7 +123,7 @@ onMounted(() => {
     <div class="mt-2">
         <input
 			type="text"
-			v-model="misubRef.url"
+			v-model="props.misub.url"
             @input="handleUrlInput"
 			class="w-full text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/50 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
 			placeholder="http://, vmess://, hy2://..."

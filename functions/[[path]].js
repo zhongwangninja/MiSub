@@ -1,3 +1,4 @@
+import yaml from 'js-yaml';
 // --- 全局常量 ---
 const KV_KEY_MAIN = 'misub_data_v1';
 const KV_KEY_SETTINGS = 'worker_settings_v1';
@@ -142,17 +143,98 @@ async function handleApiRequest(request, env) {
             }
 
             // 处理获取单个订阅链接节点数的请求
+            // ...existing code...
             case '/node_count': {
-                 if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
-                 const { url: subUrl } = await request.json();
-                 const response = await getUrl(subUrl, request.headers.get('User-Agent'));
-                 if (!response.ok) return new Response(JSON.stringify({ count: 'N/A' }));
-                 let text = await response.text();
-                 let nodes;
-                 try { nodes = atob(text).split('\n'); } catch(e) { nodes = text.split('\n'); }
-                 const count = nodes.filter(line => line.trim().includes('://')).length;
-                 return new Response(JSON.stringify({ count }), { headers: { 'Content-Type': 'application/json' }});
+                if (request.method !== 'POST') {
+                    return new Response('Method Not Allowed', { status: 405 });
+                }
+                try {
+                    const rawBody = await request.text();
+                    console.log('收到原始 body:', rawBody);
+                    let subUrl = '';
+                    try {
+                        const body = JSON.parse(rawBody);
+                        subUrl = body.url;
+                    } catch (e) {
+                        console.log('JSON 解析失败:', e);
+                        return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+                    }
+                    console.log('收到 node_count 请求:', subUrl);
+
+                    if (!subUrl || typeof subUrl !== 'string' || !/^https?:\/\//.test(subUrl)) {
+                        console.log('参数错误:', subUrl);
+                        return new Response(JSON.stringify({ error: 'Invalid or missing url' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+                    }
+
+                    const response = await getUrl(subUrl, request.headers.get('User-Agent'));
+                    if (!response.ok) {
+                        console.log('fetch 失败:', response.status);
+                        return new Response(JSON.stringify({ count: 0, error: 'Fetch failed' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                    }
+
+                    let text = await response.text();
+                    let decoded = '';
+                    try {
+                        decoded = atob(text);
+                        console.log('atob 解码成功');
+                    } catch (e) {
+                        decoded = text;
+                        console.log('atob 解码失败');
+                    }
+                    decoded = decoded.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                    console.log('解码后内容前500字:', decoded.slice(0, 500));                   
+                    
+                    // 打印所有被识别为节点的行
+                    const lines = decoded.split('\n');
+                    lines.forEach((line, idx) => {
+                      if (/^(ss|ssr|vmess|vless|trojan|hysteria2?):\/\//i.test(line.trim())) {
+                        console.log('节点行', idx, ':', line);
+                      }
+                    });
+
+                    // 统计节点数
+                    const nodeLines = lines
+                      .map(line => line.trim())
+                      .filter(line =>
+                        line &&
+                        !line.startsWith('#') &&
+                        /^(ss|ssr|vmess|vless|trojan|hysteria2?):\/\//i.test(line)
+                      );
+                    let count = nodeLines.length;
+                    console.log('最终统计 count:', count);
+
+                    try {
+                        // 尝试 YAML 解析
+                        const doc = yaml.load(decoded);
+                        if (doc && Array.isArray(doc.proxies)) {
+                            count = doc.proxies.length;
+                            console.log('YAML 解析成功，proxies 数量:', count);
+                        } else {
+                            // fallback: 普通节点统计
+                            const nodeLines = decoded
+                                .split('\n')
+                                .map(line => line.trim())
+                                .filter(line => line && !line.startsWith('#') && /^(ss|ssr|vmess|vless|trojan|hysteria2?):\/\//i.test(line));
+                            count = nodeLines.length;
+                            console.log('YAML 解析失败，正则统计 count:', count);
+                        }
+                    } catch (e) {
+                        // fallback: 普通节点统计
+                        const nodeLines = decoded
+                            .split('\n')
+                            .map(line => line.trim())
+                            .filter(line => line && !line.startsWith('#') && /^(ss|ssr|vmess|vless|trojan|hysteria2?):\/\//i.test(line));
+                        count = nodeLines.length;
+                        console.log('YAML 解析异常，正则统计 count:', count);
+                    }
+
+                    return new Response(JSON.stringify({ count }), { headers: { 'Content-Type': 'application/json' } });
+                } catch (e) {
+                    console.log('异常:', e);
+                    return new Response(JSON.stringify({ count: 0, error: e.message }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                }
             }
+            // ...existing code...
 
             // 处理设置的读取和保存
             case '/settings': {

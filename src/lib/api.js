@@ -44,15 +44,17 @@ export async function saveMisubs(misubs) {
 
 export async function fetchNodeCount(subUrl) {
     try {
-        const response = await fetch('/api/node_count', {
+        const res = await fetch('/api/node_count', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: subUrl })
         });
-        if (!response.ok) return { count: 'N/A' };
-        return await response.json();
-    } catch (error) {
-        return { count: 'N/A' };
+        const data = await res.json();
+        console.log('后端返回:', data); // 调试日志
+        return typeof data.count === 'number' ? data.count : 0;
+    } catch (e) {
+        console.error('fetchNodeCount error:', e);
+        return 0;
     }
 }
 
