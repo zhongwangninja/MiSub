@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { saveMisubs, fetchNodeCount } from '../lib/api.js';
 import { extractNodeName } from '../lib/utils.js';
 import { useToast, showSettingsModal } from '../lib/stores.js';
@@ -34,7 +34,7 @@ const showBulkImportModal = ref(false);
 const showDeleteSubsModal = ref(false);
 const showDeleteNodesModal = ref(false);
 const showSubModal = ref(false);
-const showNodeModal = ref(false);
+const showNodeModal = ref(false); // 【最终修正】统一使用这个变量名
 
 // 编辑/新增所需的状态
 const editingSubscription = ref(null);
@@ -44,7 +44,7 @@ const isNewNode = ref(false);
 
 
 // --- 唯一的 onMounted 钩子 ---
-onMounted(() => {
+const initializeState = () => {
   isLoading.value = true;
   if (props.data && props.data.misubs) {
     const subsData = props.data.misubs || [];
@@ -70,7 +70,9 @@ onMounted(() => {
     subsArray.forEach(sub => handleUpdateNodeCount(sub.id, true));
   }
   isLoading.value = false;
-});
+};
+
+onMounted(initializeState);
 
 
 // --- 统一的计算属性 ---
@@ -111,7 +113,7 @@ const markDirty = () => {
 };
 
 const handleDiscard = () => {
-  onMounted();
+  initializeState();
   subsDirty.value = false;
   showToast('已放弃所有未保存的更改');
 };
@@ -197,6 +199,17 @@ const handleEditNode = (nodeId) => {
     }
 };
 
+watch(() => editingNode.value?.url, (newUrl) => {
+    if (editingNode.value && newUrl) {
+        if (isNewNode.value || !editingNode.value.name) {
+            const extractedName = extractNodeName(newUrl);
+            if (extractedName) {
+                editingNode.value.name = extractedName;
+            }
+        }
+    }
+});
+
 const handleSaveNode = () => {
     if (!editingNode.value || !editingNode.value.url) {
         showToast('节点链接不能为空', 'error'); return;
@@ -238,6 +251,7 @@ const handleSave = async () => {
 
 const handleDeleteAllSubscriptions = () => {
   subscriptions.value = [];
+  subsCurrentPage.value = 1;
   markDirty();
   showDeleteSubsModal.value = false;
 };
@@ -255,13 +269,7 @@ const handleBulkImport = (importText) => {
   const newSubs = [];
   const newNodes = [];
   for (const line of lines) {
-    const newItem = {
-      id: crypto.randomUUID(),
-      name: extractNodeName(line) || '未命名',
-      url: line,
-      enabled: true,
-      isUpdating: false
-    };
+    const newItem = { id: crypto.randomUUID(), name: extractNodeName(line) || '未命名', url: line, enabled: true, isUpdating: false };
     if (/^https?:\/\//.test(line)) {
       newSubs.push({ ...newItem, nodeCount: 0 });
     } else if (/^(ss|vmess|trojan|vless|hysteria2?):\/\//.test(line)) {
@@ -286,7 +294,6 @@ const changeManualNodesPage = (page) => {
   if (page < 1 || page > manualNodesTotalPages.value) return;
   manualNodesCurrentPage.value = page;
 };
-
 </script>
 
 <template>
@@ -334,7 +341,15 @@ const changeManualNodesPage = (page) => {
 
                 <div v-if="subscriptions.length > 0">
                   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                      <Card v-for="subscription in paginatedSubscriptions" :key="subscription.id" :misub="subscription" @delete="handleDeleteSubscription(subscription.id)" @change="markDirty" @update="handleUpdateNodeCount(subscription.id)" @edit="handleEditSubscription(subscription.id)"/>
+                      <Card
+                        v-for="subscription in paginatedSubscriptions"
+                        :key="subscription.id"
+                        :misub="subscription"
+                        @delete="handleDeleteSubscription(subscription.id)"
+                        @change="markDirty"
+                        @update="handleUpdateNodeCount(subscription.id)"
+                        @edit="handleEditSubscription(subscription.id)"
+                      />
                   </div>
                   <div v-if="subsTotalPages > 1" class="flex justify-center items-center space-x-4 mt-8 text-sm font-medium">
                       <button @click="changeSubsPage(subsCurrentPage - 1)" :disabled="subsCurrentPage === 1" class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">&laquo; 上一页</button>
@@ -358,7 +373,13 @@ const changeManualNodesPage = (page) => {
                 </div>
                 <div v-if="manualNodes.length > 0">
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        <ManualNodeCard v-for="node in paginatedManualNodes" :key="node.id" :node="node" @edit="handleEditNode(node.id)" @delete="handleDeleteNode(node.id)"/>
+                        <ManualNodeCard 
+                            v-for="node in paginatedManualNodes" 
+                            :key="node.id"
+                            :node="node"
+                            @edit="handleEditNode(node.id)"
+                            @delete="handleDeleteNode(node.id)"
+                        />
                     </div>
                     <div v-if="manualNodesTotalPages > 1" class="flex justify-center items-center space-x-4 mt-8 text-sm font-medium">
                       <button @click="changeManualNodesPage(manualNodesCurrentPage - 1)" :disabled="manualNodesCurrentPage === 1" class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">&laquo; 上一页</button>
@@ -380,21 +401,21 @@ const changeManualNodesPage = (page) => {
 
   <BulkImportModal v-model:show="showBulkImportModal" @import="handleBulkImport" />
   <Modal v-model:show="showDeleteSubsModal" @confirm="handleDeleteAllSubscriptions">
-      <template #title><h3 class="text-lg font-bold text-red-500">确认清空订阅</h3></template>
-      <template #body><p class="text-sm text-gray-400">您确定要删除所有**订阅**吗？此操作将标记为待保存，不会影响手动节点。</p></template>
+    <template #title><h3 class="text-lg font-bold text-red-500">确认清空订阅</h3></template>
+    <template #body><p class="text-sm text-gray-400">您确定要删除所有**订阅**吗？此操作将标记为待保存，不会影响手动节点。</p></template>
   </Modal>
   <Modal v-model:show="showDeleteNodesModal" @confirm="handleDeleteAllNodes">
     <template #title><h3 class="text-lg font-bold text-red-500">确认清空节点</h3></template>
     <template #body><p class="text-sm text-gray-400">您确定要删除所有**手动节点**吗？此操作将标记为待保存，不会影响订阅。</p></template>
   </Modal>
   <Modal v-if="editingNode" v-model:show="showNodeModal" @confirm="handleSaveNode">
-      <template #title><h3 class="text-lg font-bold text-gray-800 dark:text-white">{{ isNewNode ? '新增手动节点' : '编辑手动节点' }}</h3></template>
-      <template #body>
-        <div class="space-y-4">
-          <div><label for="node-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点名称</label><input type="text" id="node-name" v-model="editingNode.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white"></div>
-          <div><label for="node-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点链接</label><textarea id="node-url" v-model="editingNode.url" rows="4" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white"></textarea></div>
-        </div>
-      </template>
+    <template #title><h3 class="text-lg font-bold text-gray-800 dark:text-white">{{ isNewNode ? '新增手动节点' : '编辑手动节点' }}</h3></template>
+    <template #body>
+      <div class="space-y-4">
+        <div><label for="node-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点名称</label><input type="text" id="node-name" v-model="editingNode.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white"></div>
+        <div><label for="node-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点链接</label><textarea id="node-url" v-model="editingNode.url" @input="handleNodeUrlInput" rows="4" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white"></textarea></div>
+      </div>
+    </template>
   </Modal>
   <Modal v-if="editingSubscription" v-model:show="showSubModal" @confirm="handleSaveSubscription">
     <template #title><h3 class="text-lg font-bold text-gray-800 dark:text-white">{{ isNewSubscription ? '新增订阅' : '编辑订阅' }}</h3></template>
