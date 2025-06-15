@@ -17,12 +17,34 @@ const props = defineProps({
 
 const { showToast } = useToast();
 
+// --- 统一的状态声明 ---
 const subscriptions = ref([]);
 const manualNodes = ref([]);
 const config = ref({});
 const isLoading = ref(true);
+const subsDirty = ref(false);
+const saveState = ref('idle');
+const subsCurrentPage = ref(1);
+const subsItemsPerPage = 6;
+const manualNodesCurrentPage = ref(1);
+const manualNodesPerPage = 24;
 
-const initializeState = () => {
+// 模态框状态
+const showBulkImportModal = ref(false);
+const showDeleteSubsModal = ref(false);
+const showDeleteNodesModal = ref(false);
+const showSubModal = ref(false);
+const showNodeModal = ref(false);
+
+// 编辑/新增所需的状态
+const editingSubscription = ref(null);
+const isNewSubscription = ref(false);
+const editingNode = ref(null);
+const isNewNode = ref(false);
+
+
+// --- 唯一的 onMounted 钩子 ---
+onMounted(() => {
   isLoading.value = true;
   if (props.data && props.data.misubs) {
     const subsData = props.data.misubs || [];
@@ -38,19 +60,20 @@ const initializeState = () => {
       if (/^https?:\/\//.test(item.url)) {
         subsArray.push({ ...newItem, nodeCount: item.nodeCount || 0 });
       } else {
-        nodesArray.push(newItem);
+        nodesArray.push({ ...newItem, nodeCount: 1 });
       }
     }
     subscriptions.value = subsArray;
     manualNodes.value = nodesArray;
     config.value = props.data.config || {};
+
+    subsArray.forEach(sub => handleUpdateNodeCount(sub.id, true));
   }
   isLoading.value = false;
-};
+});
 
-onMounted(initializeState);
 
-// 【核心修正 A】修正了返回对象的键名，确保与 Overview.vue 匹配
+// --- 统一的计算属性 ---
 const stats = computed(() => {
   const enabledSubscriptions = subscriptions.value.filter(s => s.enabled);
   const nodesFromSubs = enabledSubscriptions.reduce((acc, sub) => {
@@ -58,91 +81,135 @@ const stats = computed(() => {
       return acc + (isNaN(count) ? 0 : count);
   }, 0);
   const enabledManualNodesCount = manualNodes.value.filter(n => n.enabled).length;
+  
   return {
-      totalSubscriptions: subscriptions.value.length,
-      enabledSubscriptions: enabledSubscriptions.length,
-      totalNodes: nodesFromSubs + enabledManualNodesCount,
+    totalSubscriptions: subscriptions.value.length,
+    enabledSubscriptions: enabledSubscriptions.length,
+    totalNodes: nodesFromSubs + enabledManualNodesCount,
   };
 });
 
-// --- 状态管理 ---
-const subsDirty = ref(false);
-const saveState = ref('idle');
-const showBulkImportModal = ref(false);
-const showDeleteSubsModal = ref(false);
-const showDeleteNodesModal = ref(false);
-const showEditNodeModal = ref(false);
-const editingNode = ref(null);
-const isNewNode = ref(false);
-const currentPage = ref(1);
-const itemsPerPage = 9;
-
-// 【核心新增】为新增订阅模态框创建状态
-const showAddSubModal = ref(false);
-const newSubscription = ref({ name: '', url: '', enabled: true })
-
-// --- 计算属性 ---
-const totalPages = computed(() => Math.ceil(subscriptions.value.length / itemsPerPage));
+const subsTotalPages = computed(() => Math.ceil(subscriptions.value.length / subsItemsPerPage));
 const paginatedSubscriptions = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage;
-  const end = start + itemsPerPage;
+  const start = (subsCurrentPage.value - 1) * subsItemsPerPage;
+  const end = start + subsItemsPerPage;
   return subscriptions.value.slice(start, end);
 });
 
-// --- 核心函数 ---
-const markDirty = () => { subsDirty.value = true; saveState.value = 'idle'; };
+const manualNodesTotalPages = computed(() => Math.ceil(manualNodes.value.length / manualNodesPerPage));
+const paginatedManualNodes = computed(() => {
+  const start = (manualNodesCurrentPage.value - 1) * manualNodesPerPage;
+  const end = start + manualNodesPerPage;
+  return manualNodes.value.slice(start, end);
+});
 
-const handleDiscard = () => { initializeState(); subsDirty.value = false; showToast('已放弃所有未保存的更改'); };
 
-const handleUpdateNodeCount = async (subId) => {
+// --- 统一的函数逻辑 ---
+const markDirty = () => {
+    subsDirty.value = true;
+    saveState.value = 'idle';
+};
+
+const handleDiscard = () => {
+  onMounted();
+  subsDirty.value = false;
+  showToast('已放弃所有未保存的更改');
+};
+
+const handleUpdateNodeCount = async (subId, isInitialLoad = false) => {
     const subToUpdate = subscriptions.value.find(s => s.id === subId);
-    if (!subToUpdate) return;
+    if (!subToUpdate || !subToUpdate.url.startsWith('http')) return;
+    
     subToUpdate.isUpdating = true;
     try {
         const count = await fetchNodeCount(subToUpdate.url);
         subToUpdate.nodeCount = typeof count === 'number' ? count : 0;
-        showToast(`${subToUpdate.name} 更新成功！`, 'success');
-        markDirty();
-    } catch (error) { showToast(`${subToUpdate.name} 更新失败`, 'error');} 
-    finally { subToUpdate.isUpdating = false; }
+        if (!isInitialLoad) {
+          showToast(`${subToUpdate.name} 更新成功！`, 'success');
+          markDirty();
+        }
+    } catch (error) {
+        if (!isInitialLoad) showToast(`${subToUpdate.name} 更新失败`, 'error');
+    } finally {
+        subToUpdate.isUpdating = false;
+    }
 };
 
-// 【核心改造】新增订阅函数现在只打开模态框
-const handleAddSubscription = () => { newSubscription.value = { name: '', url: '', enabled: true }; showAddSubModal.value = true; };
+const handleAddSubscription = () => {
+  isNewSubscription.value = true;
+  editingSubscription.value = { name: '', url: '', enabled: true };
+  showSubModal.value = true;
+};
 
-// 【核心新增】确认添加订阅的函数
-const handleConfirmAddSubscription = () => {
-  if (!newSubscription.value.url) { showToast('订阅链接不能为空', 'error'); return; }
-  const subToAdd = { ...newSubscription.value, id: crypto.randomUUID(), isNew: true, nodeCount: 0, isUpdating: false, };
-  subscriptions.value.unshift(subToAdd);
-  currentPage.value = 1;
+const handleEditSubscription = (subId) => {
+  const sub = subscriptions.value.find(s => s.id === subId);
+  if (sub) {
+    isNewSubscription.value = false;
+    editingSubscription.value = { ...sub };
+    showSubModal.value = true;
+  }
+};
+
+const handleSaveSubscription = () => {
+  if (!editingSubscription.value || !editingSubscription.value.url) {
+    showToast('订阅链接不能为空', 'error'); return;
+  }
+  if (!/^https?:\/\//.test(editingSubscription.value.url)) {
+    showToast('请输入有效的 http:// 或 https:// 订阅链接', 'error'); return;
+  }
+
+  if (isNewSubscription.value) {
+    const subToAdd = { ...editingSubscription.value, id: crypto.randomUUID(), nodeCount: 0, isUpdating: false, };
+    subscriptions.value.unshift(subToAdd);
+    subsCurrentPage.value = 1;
+    handleUpdateNodeCount(subToAdd.id);
+  } else {
+    const index = subscriptions.value.findIndex(s => s.id === editingSubscription.value.id);
+    if (index !== -1) {
+      if (subscriptions.value[index].url !== editingSubscription.value.url) {
+        editingSubscription.value.nodeCount = 0;
+        handleUpdateNodeCount(editingSubscription.value.id);
+      }
+      subscriptions.value[index] = editingSubscription.value;
+    }
+  }
   markDirty();
-  showToast('订阅已添加，请点击保存', 'success');
-  handleUpdateNodeCount(subToAdd.id);
-  showAddSubModal.value = false;
+  showSubModal.value = false;
 };
 
-const handleDeleteSubscription = (id) => { subscriptions.value = subscriptions.value.filter((s) => s.id !== id); markDirty(); };
+const handleDeleteSubscription = (id) => {
+  subscriptions.value = subscriptions.value.filter((s) => s.id !== id);
+  markDirty();
+};
 
 const handleAddNode = () => {
     isNewNode.value = true;
     editingNode.value = { id: crypto.randomUUID(), name: '', url: '', enabled: true };
-    showEditNodeModal.value = true; };
+    showNodeModal.value = true;
+};
 
 const handleEditNode = (nodeId) => {
     const node = manualNodes.value.find(n => n.id === nodeId);
     if (node) {
         isNewNode.value = false;
         editingNode.value = { ...node };
-        showEditNodeModal.value = true;}
+        showNodeModal.value = true;
+    }
 };
 
 const handleSaveNode = () => {
-    if (!editingNode.value || !editingNode.value.url) { showToast('节点链接不能为空', 'error'); return; }
-    if (isNewNode.value) { manualNodes.value.unshift(editingNode.value); } 
-    else { const index = manualNodes.value.findIndex(n => n.id === editingNode.value.id); if (index !== -1) { manualNodes.value[index] = editingNode.value; } }
+    if (!editingNode.value || !editingNode.value.url) {
+        showToast('节点链接不能为空', 'error'); return;
+    }
+    if (isNewNode.value) {
+        manualNodes.value.unshift(editingNode.value);
+        manualNodesCurrentPage.value = 1;
+    } else {
+        const index = manualNodes.value.findIndex(n => n.id === editingNode.value.id);
+        if (index !== -1) { manualNodes.value[index] = editingNode.value; }
+    }
     markDirty();
-    showEditNodeModal.value = false;
+    showNodeModal.value = false;
 };
 
 const handleDeleteNode = (nodeId) => {
@@ -153,17 +220,15 @@ const handleDeleteNode = (nodeId) => {
 const handleSave = async () => {
   saveState.value = 'saving';
   const combinedMisubs = [
-    ...subscriptions.value.map(({ isNew, isUpdating, ...rest }) => rest),
-    ...manualNodes.value.map(({ isNew, isUpdating, ...rest }) => rest)
+    ...subscriptions.value.map(({ isNew, isUpdating, id, ...rest }) => rest),
+    ...manualNodes.value.map(({ isNew, isUpdating, id, ...rest }) => rest)
   ];
   try {
     const result = await saveMisubs(combinedMisubs);
     if (result.success) {
       saveState.value = 'success';
-      setTimeout(() => {
-          subsDirty.value = false;
-          saveState.value = 'idle';
-      }, 1500);
+      subscriptions.value.forEach(sub => sub.isNew = false);
+      setTimeout(() => { subsDirty.value = false; saveState.value = 'idle'; }, 1500);
     } else { throw new Error(result.message || '保存失败'); }
   } catch (error) {
     showToast(error.message, 'error');
@@ -171,19 +236,20 @@ const handleSave = async () => {
   }
 };
 
-const handleDeleteAllSubscriptions = async () => {
+const handleDeleteAllSubscriptions = () => {
   subscriptions.value = [];
   markDirty();
   showDeleteSubsModal.value = false;
 };
 
-const handleDeleteAllNodes = async () => {
+const handleDeleteAllNodes = () => {
   manualNodes.value = [];
+  manualNodesCurrentPage.value = 1;
   markDirty();
   showDeleteNodesModal.value = false;
 };
 
-const handleBulkImport = async (importText) => {
+const handleBulkImport = (importText) => {
   if (!importText) return;
   const lines = importText.split('\n').map(line => line.trim()).filter(Boolean);
   const newSubs = [];
@@ -204,23 +270,30 @@ const handleBulkImport = async (importText) => {
   }
   subscriptions.value = [...newSubs, ...subscriptions.value];
   manualNodes.value = [...newNodes, ...manualNodes.value];
-  currentPage.value = 1;
+  subsCurrentPage.value = 1;
+  manualNodesCurrentPage.value = 1;
   markDirty();
   showToast(`成功导入 ${newSubs.length} 条订阅和 ${newNodes.length} 个手动节点，请点击保存`);
   newSubs.forEach(sub => handleUpdateNodeCount(sub.id));
 };
 
-const changePage = (page) => {
-  if (page < 1 || page > totalPages.value) return;
-  currentPage.value = page;
+const changeSubsPage = (page) => {
+  if (page < 1 || page > subsTotalPages.value) return;
+  subsCurrentPage.value = page;
 };
+
+const changeManualNodesPage = (page) => {
+  if (page < 1 || page > manualNodesTotalPages.value) return;
+  manualNodesCurrentPage.value = page;
+};
+
 </script>
 
 <template>
   <div v-if="isLoading" class="text-center py-16 text-gray-500">
     正在加载...
   </div>
-  <div v-else class="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+  <div v-else class="w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-bold text-gray-800 dark:text-white">总览</h1>
       <div class="flex items-center gap-2">
@@ -237,24 +310,9 @@ const changePage = (page) => {
                 <button @click="handleDiscard" class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">
                     放弃更改
                 </button>
-                <button 
-                    @click="handleSave" 
-                    :disabled="saveState !== 'idle'"
-                    class="px-5 py-2 text-sm text-white font-semibold rounded-lg shadow-sm flex items-center justify-center transition-all duration-300 w-28"
-                    :class="{
-                        'bg-green-600 hover:bg-green-700': saveState === 'idle',
-                        'bg-gray-500 cursor-not-allowed': saveState === 'saving',
-                        'bg-teal-500 cursor-not-allowed': saveState === 'success',
-                    }"
-                >
-                    <div v-if="saveState === 'saving'" class="flex items-center">
-                        <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        <span>保存中</span>
-                    </div>
-                    <div v-else-if="saveState === 'success'" class="flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        <span>已保存</span>
-                    </div>
+                <button @click="handleSave" :disabled="saveState !== 'idle'" class="px-5 py-2 text-sm text-white font-semibold rounded-lg shadow-sm flex items-center justify-center transition-all duration-300 w-28" :class="{'bg-green-600 hover:bg-green-700': saveState === 'idle', 'bg-gray-500 cursor-not-allowed': saveState === 'saving', 'bg-teal-500 cursor-not-allowed': saveState === 'success' }">
+                    <div v-if="saveState === 'saving'" class="flex items-center"><svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>保存中</span></div>
+                    <div v-else-if="saveState === 'success'" class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg><span>已保存</span></div>
                     <span v-else>保存更改</span>
                 </button>
             </div>
@@ -274,24 +332,19 @@ const changePage = (page) => {
                     </div>
                 </div>
 
-                <div v-if="subscriptions.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  <Card
-                    v-for="subscription in paginatedSubscriptions"
-                    :key="subscription.id"
-                    :misub="subscription"
-                    @delete="handleDeleteSubscription(subscription.id)"
-                    @change="markDirty"
-                    @update="handleUpdateNodeCount(subscription.id)"
-                  />
+                <div v-if="subscriptions.length > 0">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                      <Card v-for="subscription in paginatedSubscriptions" :key="subscription.id" :misub="subscription" @delete="handleDeleteSubscription(subscription.id)" @change="markDirty" @update="handleUpdateNodeCount(subscription.id)" @edit="handleEditSubscription(subscription.id)"/>
+                  </div>
+                  <div v-if="subsTotalPages > 1" class="flex justify-center items-center space-x-4 mt-8 text-sm font-medium">
+                      <button @click="changeSubsPage(subsCurrentPage - 1)" :disabled="subsCurrentPage === 1" class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">&laquo; 上一页</button>
+                      <span class="text-gray-500 dark:text-gray-400">第 {{ subsCurrentPage }} / {{ subsTotalPages }} 页</span>
+                      <button @click="changeSubsPage(subsCurrentPage + 1)" :disabled="subsCurrentPage === subsTotalPages" class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">下一页 &raquo;</button>
+                  </div>
                 </div>
                 <div v-else class="text-center py-16 text-gray-500 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
                   <h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">没有机场订阅</h3>
                   <p class="mt-1 text-sm text-gray-500">你可以通过批量导入或点击新增。</p>
-                </div>
-                <div v-if="totalPages > 1" class="flex justify-center items-center space-x-4 mt-8 text-sm font-medium">
-                  <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1" class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">&laquo; 上一页</button>
-                  <span class="text-gray-500 dark:text-gray-400">第 {{ currentPage }} / {{ totalPages }} 页</span>
-                  <button @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages" class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">下一页 &raquo;</button>
                 </div>
             </div>
 
@@ -303,22 +356,21 @@ const changePage = (page) => {
                         <button @click="handleAddNode" class="text-sm font-semibold px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-sm">新增节点</button>
                     </div>
                 </div>
-
-                <div v-if="manualNodes.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <ManualNodeCard 
-                      v-for="node in manualNodes" 
-                      :key="node.id"
-                      :node="node"
-                      @edit="handleEditNode(node.id)"
-                      @delete="handleDeleteNode(node.id)"
-                  />
+                <div v-if="manualNodes.length > 0">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <ManualNodeCard v-for="node in paginatedManualNodes" :key="node.id" :node="node" @edit="handleEditNode(node.id)" @delete="handleDeleteNode(node.id)"/>
+                    </div>
+                    <div v-if="manualNodesTotalPages > 1" class="flex justify-center items-center space-x-4 mt-8 text-sm font-medium">
+                      <button @click="changeManualNodesPage(manualNodesCurrentPage - 1)" :disabled="manualNodesCurrentPage === 1" class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">&laquo; 上一页</button>
+                      <span class="text-gray-500 dark:text-gray-400">第 {{ manualNodesCurrentPage }} / {{ manualNodesTotalPages }} 页</span>
+                      <button @click="changeManualNodesPage(manualNodesCurrentPage + 1)" :disabled="manualNodesCurrentPage === manualNodesTotalPages" class="px-3 py-1 rounded-md disabled:opacity-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">下一页 &raquo;</button>
+                    </div>
                 </div>
                 <div v-else class="text-center py-16 text-gray-500 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
                     <h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">没有手动节点</h3>
                     <p class="mt-1 text-sm text-gray-500">你可以通过批量导入或点击新增。</p>
                 </div>
             </div>
-
         </div>
         <div class="lg:col-span-1">
             <RightPanel :config="config" />
@@ -330,55 +382,35 @@ const changePage = (page) => {
   <Modal v-model:show="showDeleteSubsModal" @confirm="handleDeleteAllSubscriptions">
       <template #title><h3 class="text-lg font-bold text-red-500">确认清空订阅</h3></template>
       <template #body><p class="text-sm text-gray-400">您确定要删除所有**订阅**吗？此操作将标记为待保存，不会影响手动节点。</p></template>
-    </Modal>
-
-    <Modal v-model:show="showDeleteNodesModal" @confirm="handleDeleteAllNodes">
-      <template #title><h3 class="text-lg font-bold text-red-500">确认清空节点</h3></template>
-      <template #body><p class="text-sm text-gray-400">您确定要删除所有**手动节点**吗？此操作将标记为待保存，不会影响订阅。</p></template>
-    </Modal>
-  
-    <Modal v-if="editingNode" v-model:show="showEditNodeModal" @confirm="handleSaveNode">
+  </Modal>
+  <Modal v-model:show="showDeleteNodesModal" @confirm="handleDeleteAllNodes">
+    <template #title><h3 class="text-lg font-bold text-red-500">确认清空节点</h3></template>
+    <template #body><p class="text-sm text-gray-400">您确定要删除所有**手动节点**吗？此操作将标记为待保存，不会影响订阅。</p></template>
+  </Modal>
+  <Modal v-if="editingNode" v-model:show="showNodeModal" @confirm="handleSaveNode">
       <template #title><h3 class="text-lg font-bold text-gray-800 dark:text-white">{{ isNewNode ? '新增手动节点' : '编辑手动节点' }}</h3></template>
       <template #body>
-          <div class="space-y-4">
-              <div>
-                  <label for="node-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点名称</label>
-                  <input type="text" id="node-name" v-model="editingNode.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white">
-              </div>
-              <div>
-                  <label for="node-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点链接</label>
-                  <textarea id="node-url" v-model="editingNode.url" rows="4" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white"></textarea>
-              </div>
-          </div>
+        <div class="space-y-4">
+          <div><label for="node-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点名称</label><input type="text" id="node-name" v-model="editingNode.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white"></div>
+          <div><label for="node-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">节点链接</label><textarea id="node-url" v-model="editingNode.url" rows="4" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white"></textarea></div>
+        </div>
       </template>
-    </Modal>
-
-    <Modal v-model:show="showAddSubModal" @confirm="handleConfirmAddSubscription">
-      <template #title><h3 class="text-lg font-bold text-gray-800 dark:text-white">新增订阅</h3></template>
-      <template #body>
-          <div class="space-y-4">
-              <div>
-                  <label for="sub-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">订阅名称</label>
-                  <input type="text" id="sub-name" v-model="newSubscription.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white">
-              </div>
-              <div>
-                  <label for="sub-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">订阅链接</label>
-                  <input type="text" id="sub-url" v-model="newSubscription.url" placeholder="https://..." class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white">
-              </div>
-          </div>
-      </template>
-    </Modal>
+  </Modal>
+  <Modal v-if="editingSubscription" v-model:show="showSubModal" @confirm="handleSaveSubscription">
+    <template #title><h3 class="text-lg font-bold text-gray-800 dark:text-white">{{ isNewSubscription ? '新增订阅' : '编辑订阅' }}</h3></template>
+    <template #body>
+        <div class="space-y-4">
+            <div><label for="sub-edit-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">订阅名称</label><input type="text" id="sub-edit-name" v-model="editingSubscription.name" placeholder="（可选）不填将自动获取" class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white"></div>
+            <div><label for="sub-edit-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300">订阅链接</label><input type="text" id="sub-edit-url" v-model="editingSubscription.url" placeholder="https://..." class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono dark:text-white"></div>
+        </div>
+    </template>
+  </Modal>
   <SettingsModal v-model:show="showSettingsModal" />
 </template>
 
 <style scoped>
-/* 用于顶部横幅的滑入滑出动画 */
-.slide-fade-enter-active {
-  transition: all 0.3s ease-out;
-}
-.slide-fade-leave-active {
-  transition: all 0.3s cubic-bezier(1, 0.5, 0.8, 1);
-}
+.slide-fade-enter-active, .slide-fade-leave-active { transition: all 0.3s ease-out; }
+.slide-fade-leave-active { transition: all 0.3s cubic-bezier(1, 0.5, 0.8, 1); }
 .slide-fade-enter-from,
 .slide-fade-leave-to {
   transform: translateY(-20px);

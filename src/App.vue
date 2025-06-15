@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard.vue';
 import Login from './components/Login.vue';
 import Header from './components/Header.vue';
 import Toast from './components/Toast.vue';
+import Footer from './components/Footer.vue';
 import { useToast } from './lib/stores.js';
 
 const { initTheme, theme } = useTheme();
@@ -68,20 +69,23 @@ onMounted(() => {
     <Header :is-logged-in="sessionState === 'loggedIn'" @logout="handleLogout" />
 
     <main 
-      class="flex-grow overflow-y-auto"
-      :class="{ 'flex items-center justify-center': sessionState !== 'loggedIn' }"
+      class="flex-grow"
+      :class="{ 
+        'flex items-center justify-center': sessionState !== 'loggedIn',
+        'overflow-y-auto': sessionState === 'loggedIn' 
+      }"
     >
       <div v-if="sessionState === 'loading'" class="text-center">
         <p class="text-gray-500">正在加载...</p>
       </div>
+      
       <Dashboard v-else-if="sessionState === 'loggedIn' && initialData" :data="initialData" />
       
-      <div v-else class="w-full flex justify-center p-4 -mt-20">
-        <Login :login="login" />
-      </div>
+      <Login v-else :login="login" />
     </main>
     
     <Toast :show="toastState.id" :message="toastState.message" :type="toastState.type" />
+    <Footer />
   </div>
 </template>
 

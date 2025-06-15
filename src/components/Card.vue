@@ -1,6 +1,5 @@
 <script setup>
-import { ref, computed, nextTick } from 'vue';
-import { extractNodeName } from '../lib/utils.js';
+import { computed } from 'vue';
 
 const props = defineProps({
   misub: {
@@ -9,38 +8,14 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['delete', 'change', 'update']);
+const emit = defineEmits(['delete', 'change', 'update', 'edit']);
 
-const isEditing = ref(props.misub.isNew || false);
-const nameInput = ref(null);
-
-const handleEditClick = () => {
-  isEditing.value = true;
-  nextTick(() => {
-    nameInput.value?.focus();
-    nameInput.value?.select();
-  });
-};
-
-const handleNameBlur = () => {
-  isEditing.value = false;
-  emit('change');
-}
-
-const handleUrlInput = () => {
-  if (!props.misub.name || props.misub.isNew) {
-    const extracted = extractNodeName(props.misub.url);
-    if (extracted) props.misub.name = extracted;
-  }
-  if (props.misub.isNew) props.misub.isNew = false;
-  emit('change');
-};
+// 【核心改造】移除所有编辑相关的 ref 和函数 (isEditing, nameInput 等)
 
 const getProtocol = (url) => {
   try {
     if (!url) return 'unknown';
     const lowerUrl = url.toLowerCase();
-    // 【核心修正】精确区分 https 和 http
     if (lowerUrl.startsWith('https://')) return 'https';
     if (lowerUrl.startsWith('http://')) return 'http';
     if (lowerUrl.includes('clash')) return 'clash';
@@ -69,7 +44,7 @@ const protocolStyle = computed(() => {
 
 <template>
   <div 
-    class="group bg-white/50 dark:bg-gray-900/60 backdrop-blur-sm rounded-2xl shadow-lg dark:shadow-2xl ring-1 ring-black/5 p-5 transition-all duration-300 hover:-translate-y-1 flex flex-col h-full min-h-[190px]"
+    class="group bg-white dark:bg-gray-900/60 backdrop-blur-sm rounded-2xl shadow-lg dark:shadow-2xl ring-1 ring-black/5 p-5 transition-all duration-300 hover:-translate-y-1 flex flex-col h-full min-h-[190px]"
     :class="{ 'opacity-50': !misub.enabled, 'ring-indigo-500/50': misub.isNew }"
   >
     <div class="flex items-start justify-between gap-3">
@@ -82,26 +57,16 @@ const protocolStyle = computed(() => {
             {{ protocolStyle.text }}
           </div>
         </div>
-        <p v-if="!isEditing" class="font-bold text-xl text-gray-800 dark:text-gray-100 truncate cursor-pointer" @click="handleEditClick" :title="misub.name || '未命名订阅'">
+        <p class="font-bold text-xl text-gray-800 dark:text-gray-100 truncate" :title="misub.name || '未命名订阅'">
           {{ misub.name || '未命名订阅' }}
         </p>
-        <input 
-            v-else
-            type="text" 
-            ref="nameInput"
-            v-model="misub.name" 
-            @blur="handleNameBlur"
-            @keyup.enter="handleNameBlur"
-            class="font-bold text-xl text-gray-800 dark:text-gray-100 bg-transparent focus:outline-none w-full"
-            placeholder="订阅名称"
-        />
       </div>
       
       <div class="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <button @click.stop="handleEditClick" class="p-1.5 rounded-full hover:bg-gray-500/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" title="编辑名称">
+          <button @click="emit('edit')" class="p-1.5 rounded-full hover:bg-gray-500/10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" title="编辑">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L16.732 3.732z" /></svg>
           </button>
-          <button @click.stop="emit('delete')" class="p-1.5 rounded-full hover:bg-red-500/10 text-gray-400 hover:text-red-500" title="删除">
+          <button @click="emit('delete')" class="p-1.5 rounded-full hover:bg-red-500/10 text-gray-400 hover:text-red-500" title="删除">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
           </button>
       </div>
@@ -110,10 +75,9 @@ const protocolStyle = computed(() => {
     <div class="mt-3 flex-grow">
         <input
             type="text"
-			v-model="misub.url"
-            @input="emit('change')"
-			class="w-full text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800/50 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-			placeholder="https://..."
+			:value="misub.url"
+            readonly
+			class="w-full text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800/50 rounded-lg px-3 py-2 focus:outline-none font-mono"
 		/>
     </div>
     

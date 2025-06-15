@@ -59,11 +59,22 @@ async function getUrl(targetUrl, userAgentHeader) {
 async function getSUB(apiUrls, userAgentHeader) {
     let content = "";
     const responses = await Promise.allSettled(apiUrls.map(apiUrl => getUrl(apiUrl, userAgentHeader).then(res => res.ok ? res.text() : Promise.reject(new Error(`Fetch failed: ${res.status}`)))));
+    
     for (const response of responses) {
         if (response.status === 'fulfilled') {
             const text = response.value;
-            if (text.includes('://')) { content += text + '\n'; }
-            else if (isValidBase64(text.replace(/\s/g, ''))) { try { content += atob(text) + '\n'; } catch (e) {} }
+            if (text.includes('://')) { 
+                content += text + '\n'; 
+            }
+            else if (isValidBase64(text.replace(/\s/g, ''))) { 
+                try { 
+                    // 【核心修正】使用能正确处理中文字符的解码方式
+                    const decodedWithChinese = decodeURIComponent(escape(atob(text.replace(/\s/g, ''))));
+                    content += decodedWithChinese + '\n'; 
+                } catch (e) {
+                    console.error("Base64 decoding failed:", e);
+                } 
+            }
         }
     }
     return content;
