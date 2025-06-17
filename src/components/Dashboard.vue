@@ -25,7 +25,7 @@ const isLoading = ref(true);
 const subsDirty = ref(false);
 const saveState = ref('idle');
 const subsCurrentPage = ref(1);
-const subsItemsPerPage = 6;
+const subsItemsPerPage = 3;
 const manualNodesCurrentPage = ref(1);
 const manualNodesPerPage = 24;
 
@@ -34,7 +34,7 @@ const showBulkImportModal = ref(false);
 const showDeleteSubsModal = ref(false);
 const showDeleteNodesModal = ref(false);
 const showSubModal = ref(false);
-const showNodeModal = ref(false); // 【最终修正】统一使用这个变量名
+const showNodeModal = ref(false);
 
 // 编辑/新增所需的状态
 const editingSubscription = ref(null);
@@ -199,16 +199,19 @@ const handleEditNode = (nodeId) => {
     }
 };
 
-watch(() => editingNode.value?.url, (newUrl) => {
-    if (editingNode.value && newUrl) {
-        if (isNewNode.value || !editingNode.value.name) {
-            const extractedName = extractNodeName(newUrl);
-            if (extractedName) {
-                editingNode.value.name = extractedName;
-            }
-        }
+const handleNodeUrlInput = (event) => {
+  // 确保我们正在编辑一个节点对象
+  if (!editingNode.value) return;
+
+  const newUrl = event.target.value;
+  if (newUrl) {
+    const extractedName = extractNodeName(newUrl);
+    if (extractedName) {
+      // 无论是在新增还是编辑模式下，都直接用提取到的新名称覆盖旧名称
+      editingNode.value.name = extractedName;
     }
-});
+  }
+};
 
 const handleSaveNode = () => {
     if (!editingNode.value || !editingNode.value.url) {
@@ -218,8 +221,7 @@ const handleSaveNode = () => {
         manualNodes.value.unshift(editingNode.value);
         manualNodesCurrentPage.value = 1;
     } else {
-        const index = manualNodes.value.findIndex(n => n.id === editingNode.value.id);
-        if (index !== -1) { manualNodes.value[index] = editingNode.value; }
+        manualNodes.value = manualNodes.value.map(n => n.id === editingNode.value.id ? editingNode.value : n);
     }
     markDirty();
     showNodeModal.value = false;
